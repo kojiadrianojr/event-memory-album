@@ -25,10 +25,10 @@ describe("media-aspect", () => {
     expect(aspectRatioStyleValue(0, 800)).toBeNull();
   });
 
-  it("assigns photo grid spans for landscape on mobile", () => {
-    expect(photoGridTileClasses(1600, 900)).toContain("col-span-2");
-    expect(photoGridTileClasses(900, 1600)).toContain("col-span-1");
-    expect(photoGridTileClasses(null, null)).toContain("aspect-square");
+  it("assigns uniform square tiles for grid view", () => {
+    expect(photoGridTileClasses(1600, 900)).toBe("aspect-square");
+    expect(photoGridTileClasses(900, 1600)).toBe("aspect-square");
+    expect(photoGridTileClasses(null, null)).toBe("aspect-square");
   });
 
   it("picks two-photo feed layouts from orientations", () => {

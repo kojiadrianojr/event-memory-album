@@ -13,7 +13,7 @@ export default function GalleryViewToggle({
 }: GalleryViewToggleProps) {
   const items: { id: GalleryViewMode; label: string }[] = [
     { id: "feed", label: "Feed" },
-    { id: "photos", label: "Photos" },
+    { id: "grid", label: "Grid" },
   ];
 
   return (

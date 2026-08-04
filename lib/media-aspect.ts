@@ -45,22 +45,12 @@ export function aspectRatioStyleValue(
   return `${width}/${height}`;
 }
 
-/** Tailwind classes for photo grid tile column span + fallback aspect. */
+/** Uniform square tiles for grid view. */
 export function photoGridTileClasses(
-  width: number | null | undefined,
-  height: number | null | undefined
+  _width?: number | null | undefined,
+  _height?: number | null | undefined
 ): string {
-  const orientation = getMediaOrientation(width, height);
-  switch (orientation) {
-    case "landscape":
-      return "col-span-2 sm:col-span-1 aspect-[16/10]";
-    case "portrait":
-      return "col-span-1 aspect-[3/4]";
-    case "square":
-      return "col-span-1 aspect-square";
-    default:
-      return "col-span-1 aspect-square";
-  }
+  return "aspect-square";
 }
 
 /** Feed tile classes for a single photo with optional dimensions. */

@@ -1,4 +1,4 @@
-export type GalleryViewMode = "feed" | "photos";
+export type GalleryViewMode = "feed" | "grid";
 
 export function galleryViewModeKey(eventId: string): string {
   return `galleryViewMode:${eventId}`;
@@ -7,7 +7,7 @@ export function galleryViewModeKey(eventId: string): string {
 export function getGalleryViewMode(eventId: string): GalleryViewMode {
   try {
     const stored = localStorage.getItem(galleryViewModeKey(eventId));
-    return stored === "photos" ? "photos" : "feed";
+    return stored === "grid" || stored === "photos" ? "grid" : "feed";
   } catch {
     return "feed";
   }

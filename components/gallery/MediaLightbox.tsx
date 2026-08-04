@@ -127,7 +127,7 @@ function PhotoFitToggle({
   onChange: (mode: PhotoFitMode) => void;
 }) {
   return (
-    <div className="media-lightbox-fit-toggle pointer-events-auto absolute right-3 top-3 z-30 flex rounded-lg bg-black/50 p-0.5 backdrop-blur-sm">
+    <div className="media-lightbox-fit-toggle pointer-events-auto absolute right-3 top-14 z-30 flex rounded-lg bg-black/50 p-0.5 backdrop-blur-sm sm:top-3">
       {(["contain", "cover"] as const).map((value) => (
         <button
           key={value}
@@ -143,6 +143,29 @@ function PhotoFitToggle({
         </button>
       ))}
     </div>
+  );
+}
+
+function LightboxCloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="Close"
+      className="media-lightbox-close pointer-events-auto absolute left-3 top-3 z-[10001] flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+    >
+      <svg
+        className="h-5 w-5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        <path d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    </button>
   );
 }
 
@@ -304,6 +327,9 @@ export default function MediaLightbox(props: MediaLightboxProps) {
         },
         controls: () => (
           <>
+            {!usesEngagementShell && (
+              <LightboxCloseButton onClose={handleClose} />
+            )}
             {hasMultipleSlides && <FiniteNavVisibility />}
             {isPhotoSlide && (
               <PhotoFitToggle mode={photoFit} onChange={setPhotoFit} />
@@ -316,6 +342,7 @@ export default function MediaLightbox(props: MediaLightboxProps) {
               buttonPrev: () => null,
               buttonNext: () => null,
             }),
+        buttonClose: () => null,
       }}
     />
   );
@@ -327,6 +354,7 @@ export default function MediaLightbox(props: MediaLightboxProps) {
         typeof document !== "undefined" &&
         createPortal(
           <div className="media-lightbox-mobile-shell fixed inset-0 z-[10000] flex flex-col overflow-hidden bg-black">
+            <LightboxCloseButton onClose={handleClose} />
             <div
               ref={setMediaHost}
               className="relative min-h-0 w-full flex-1 touch-pan-y"
@@ -351,6 +379,7 @@ export default function MediaLightbox(props: MediaLightboxProps) {
         typeof document !== "undefined" &&
         createPortal(
           <div className="media-lightbox-desktop-shell fixed inset-0 z-[10000] flex overflow-hidden bg-black">
+            <LightboxCloseButton onClose={handleClose} />
             <div
               ref={setMediaHost}
               className="relative min-h-0 min-w-0 flex-1"

@@ -10,7 +10,7 @@ describe("gallery-view-storage", () => {
     expect(galleryViewModeKey("evt-test")).toBe("galleryViewMode:evt-test");
   });
 
-  it("defaults to feed and persists photos mode", () => {
+  it("defaults to feed and persists grid mode", () => {
     const store = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => store.get(key) ?? null,
@@ -23,8 +23,11 @@ describe("gallery-view-storage", () => {
     });
 
     expect(getGalleryViewMode("evt-test")).toBe("feed");
-    setGalleryViewMode("evt-test", "photos");
-    expect(getGalleryViewMode("evt-test")).toBe("photos");
+    setGalleryViewMode("evt-test", "grid");
+    expect(getGalleryViewMode("evt-test")).toBe("grid");
+
+    store.set("galleryViewMode:evt-legacy", "photos");
+    expect(getGalleryViewMode("evt-legacy")).toBe("grid");
 
     vi.unstubAllGlobals();
   });

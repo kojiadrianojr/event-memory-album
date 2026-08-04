@@ -316,7 +316,7 @@ export default function GalleryClient({
 
   const groups = groupByDay(filteredPosts);
   const containerWidthClass =
-    viewMode === "photos"
+    viewMode === "grid"
       ? "max-w-lg sm:max-w-2xl md:max-w-4xl"
       : "max-w-lg";
 
@@ -349,7 +349,7 @@ export default function GalleryClient({
           {!readOnly && <PhotoChallengesBanner />}
         </div>
 
-      {viewMode === "photos" ? (
+      {viewMode === "grid" ? (
         flatVisualItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
             <p className="text-sm">
@@ -361,12 +361,10 @@ export default function GalleryClient({
             </p>
           </div>
         ) : (
-          <div className="pb-6">
-            <PhotoGrid
-              items={flatVisualItems}
-              onItemClick={openPhotosLightbox}
-            />
-          </div>
+          <PhotoGrid
+            items={flatVisualItems}
+            onItemClick={openPhotosLightbox}
+          />
         )
       ) : filteredPosts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
