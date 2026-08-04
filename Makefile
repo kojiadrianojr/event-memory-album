@@ -8,7 +8,7 @@
 	docker\:up docker\:down docker\:reset docker\:logs docker\:full \
 	share\:local \
 	db\:migrate db\:migrate\:deploy db\:generate db\:studio db\:push \
-	deploy\:prod deploy\:preview
+	deploy\:prod deploy\:preview deploy\:env\:prod
 
 help: ## Show this help
 	@awk 'BEGIN {FS = "## "} \
@@ -103,6 +103,10 @@ db\:push: ## Push schema without a migration (prototyping only)
 	npx prisma db push
 
 ## Deploy (Vercel)
+deploy\:env\:prod: ## Upload .env.production to Vercel (production)
+	@test -f .env.production || (echo "Missing .env.production — add production secrets before uploading." && exit 1)
+	node scripts/vercel-env-push.mjs .env.production production
+
 deploy\:prod: ## Deploy to production
 	npx vercel --prod
 
