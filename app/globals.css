@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer components {
+  .form-label {
+    @apply block text-xs font-medium text-zinc-700;
+  }
+
+  .form-hint {
+    @apply text-xs text-zinc-500;
+  }
+
+  .form-field {
+    @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800/20;
+  }
+
+  .form-field-mono {
+    @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800/20 font-mono uppercase tracking-wide;
+  }
+
+  .form-field-lg {
+    @apply w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800/20;
+  }
+
+  .form-field-lg-mono {
+    @apply w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800/20 text-center text-lg font-mono tracking-widest uppercase;
+  }
+
+  /* Light-styled readonly URLs — avoids invisible text when OS prefers dark mode. */
+  .readonly-url-field {
+    @apply min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono truncate text-zinc-900;
+    color-scheme: light;
+    -webkit-text-fill-color: #18181b;
+  }
+
+  @media (min-width: 768px) {
+    .media-lightbox-aside .rounded-xl {
+      border-radius: 0;
+      background: transparent;
+      backdrop-filter: none;
+    }
+  }
+}
+
+/* YARL overrides — unlayered so they win over plugin CSS */
+.media-lightbox .yarl__navigation_prev:disabled,
+.media-lightbox .yarl__navigation_next:disabled,
+.media-lightbox-desktop-shell .yarl__navigation_prev:disabled,
+.media-lightbox-desktop-shell .yarl__navigation_next:disabled,
+.media-lightbox-mobile-shell .yarl__navigation_prev:disabled,
+.media-lightbox-mobile-shell .yarl__navigation_next:disabled {
+  display: none !important;
+  pointer-events: none;
+}
+
+.media-lightbox-desktop .yarl__slide_image {
+  object-fit: contain;
+}
+
+.media-lightbox-desktop-shell .yarl__portal,
+.media-lightbox-desktop-shell .yarl__root {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  z-index: 1 !important;
+  overflow: hidden !important;
+}
+
+.media-lightbox-desktop-shell .yarl__container {
+  position: absolute !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+}
+
+.media-lightbox-aside {
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.media-lightbox-desktop .yarl__slide:has(.plyr),
+.media-lightbox-mobile-shell .yarl__slide:has(.plyr) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-lightbox-desktop .yarl__slide_wrapper_interactive,
+.media-lightbox-mobile-shell .yarl__slide_wrapper_interactive {
+  touch-action: manipulation;
+  pointer-events: auto;
+}
+
+.media-lightbox-desktop .yarl__slide .plyr,
+.media-lightbox-mobile-shell .yarl__slide .plyr {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: min(80dvh, calc(100vh - 2rem));
+}
+
+.media-lightbox-desktop .yarl__slide .plyr__video-wrapper,
+.media-lightbox-mobile-shell .yarl__slide .plyr__video-wrapper {
+  width: 100%;
+  max-height: min(80dvh, calc(100vh - 2rem));
+}
+
+.media-lightbox-desktop .yarl__slide .plyr video,
+.media-lightbox-mobile-shell .yarl__slide .plyr video {
+  width: 100%;
+  max-height: min(80dvh, calc(100vh - 2rem));
+  object-fit: contain;
+}
+
+.media-lightbox-mobile-shell .yarl__slide:has(.plyr) .plyr,
+.media-lightbox-mobile-shell .yarl__slide:has(.plyr) .plyr__video-wrapper,
+.media-lightbox-mobile-shell .yarl__slide:has(.plyr) .plyr video {
+  max-height: min(55dvh, calc(100dvh - var(--lightbox-dock-height, 12rem) - 2rem));
+}
+
+.media-lightbox-mobile-shell .yarl__portal,
+.media-lightbox-mobile-shell .yarl__root {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  z-index: 1 !important;
+  overflow: hidden !important;
+}
+
+.media-lightbox-mobile-shell .yarl__container {
+  position: absolute !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+}
+
+.media-lightbox-mobile-shell .yarl__slide_image {
+  object-fit: contain;
+  max-height: 100%;
+  max-width: 100%;
+}
+
+.media-lightbox-mobile-shell .yarl__slide {
+  padding-inline: 0.25rem;
+}
+
+.media-lightbox-mobile-shell .yarl__toolbar {
+  top: 0;
+  right: 0;
+  padding: 0.5rem;
+}
+
+.media-lightbox-dock {
+  pointer-events: auto;
+  touch-action: manipulation;
+}

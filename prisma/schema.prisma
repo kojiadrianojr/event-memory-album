@@ -1,0 +1,162 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AccessMode {
+  INVITE_ONLY
+  EVENT_CODE
+  BOTH
+}
+
+model Event {
+  id               String     @id @default(cuid())
+  name             String
+  description      String?
+  eventDate        DateTime?
+  hostName         String
+  accessMode       AccessMode @default(INVITE_ONLY)
+  eventCode        String?    @unique
+  accessToken      String     @unique
+  viewToken        String     @unique
+  adminToken       String     @unique
+  adminTokenLookup String?    @unique
+  createdAt        DateTime   @default(now())
+
+  media       Media[]
+  posts       Post[]
+  guests      Guest[]
+  moments     EventMoment[]
+  prompts     EventPrompt[]
+  invitations Invitation[]
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  eventId   String
+  code      String
+  groupName String?
+  createdAt DateTime @default(now())
+
+  event   Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  members InvitationMember[]
+
+  @@unique([eventId, code])
+  @@index([eventId])
+}
+
+model InvitationMember {
+  id           String @id @default(cuid())
+  invitationId String
+  name         String
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+  TEXT
+  AUDIO
+}
+
+model EventMoment {
+  id        String @id @default(cuid())
+  eventId   String
+  name      String
+  sortOrder Int    @default(0)
+
+  event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  posts Post[]
+}
+
+model EventPrompt {
+  id        String  @id @default(cuid())
+  eventId   String
+  text      String
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  posts Post[]
+}
+
+model Post {
+  id           String    @id @default(cuid())
+  eventId      String
+  caption      String?
+  uploaderName String
+  takenAt      DateTime?
+  uploadedAt   DateTime  @default(now())
+  momentId     String?
+  promptId     String?
+
+  event     Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  moment    EventMoment? @relation(fields: [momentId], references: [id], onDelete: SetNull)
+  prompt    EventPrompt? @relation(fields: [promptId], references: [id], onDelete: SetNull)
+  media     Media[]
+  reactions Reaction[]
+  comments  Comment[]
+
+  @@index([eventId])
+}
+
+model Media {
+  id           String    @id @default(cuid())
+  eventId      String
+  postId       String
+  url          String?
+  thumbnailUrl String?
+  type         MediaType
+  sortOrder    Int       @default(0)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  post  Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([postId])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  postId    String
+  emoji     String
+  guestName String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, guestName, emoji])
+  @@index([postId])
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  postId     String
+  content    String
+  authorName String
+  createdAt  DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model Guest {
+  id       String   @id @default(cuid())
+  eventId  String
+  name     String
+  joinedAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, name])
+}

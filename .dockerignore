@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.github
+.vscode
+docs
+*.md
+.env
+.env.local
+.env.local.example
+npm-debug.log*
+tsconfig.tsbuildinfo
+vitest.config.ts
+lib/__tests__

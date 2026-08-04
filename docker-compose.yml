@@ -1,0 +1,102 @@
+services:
+  db:
+    image: postgres:16-alpine
+    env_file: &app_env_files
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-photoalbum}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  storage:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file: *app_env_files
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+    ports:
+      - "${S3_PORT:-9000}:9000"
+      - "${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  createbuckets:
+    image: minio/mc:latest
+    env_file: *app_env_files
+    depends_on:
+      storage:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-photo-album}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://storage:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      mc mb --ignore-existing local/$$S3_BUCKET_NAME;
+      mc anonymous set public local/$$S3_BUCKET_NAME;
+      exit 0;
+      "
+
+  # Full containerized app — for `make docker:full` / `make share:local`.
+  # Not part of the default `docker compose up` (see docker:up in Makefile),
+  # so the normal npm-run-dev workflow is unaffected.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["full"]
+    env_file: *app_env_files
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      # In-container DB host; npm run dev uses DATABASE_URL from .env.local (localhost).
+      # Override both URLs — .env.local DIRECT_URL points at localhost and would
+      # break prisma migrate deploy in the entrypoint.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@db:5432/photoalbum}
+      DIRECT_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@db:5432/photoalbum}
+      # HOST_IP must be reachable by BOTH this container and any browser
+      # testing the app (LAN IP for sharing, defaults to localhost).
+      # The guest browser PUTs directly to this host via a presigned URL,
+      # so it can't be an internal-only Docker service name like "storage".
+      S3_ENDPOINT: http://${HOST_IP:-localhost}:${S3_PORT:-9000}
+      S3_PUBLIC_URL: http://${HOST_IP:-localhost}:${S3_PORT:-9000}/${S3_BUCKET_NAME:-photo-album}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
+
+volumes:
+  pgdata:
+  miniodata:
+  redisdata:

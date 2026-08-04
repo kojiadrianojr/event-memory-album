@@ -1,0 +1,14 @@
+{
+  "sqltools.connections": [
+    {
+      "name": "photoalbum (local)",
+      "driver": "PostgreSQL",
+      "server": "127.0.0.1",
+      "port": 5432,
+      "database": "photoalbum",
+      "username": "postgres",
+      "password": "postgres",
+      "previewLimit": 50
+    }
+  ]
+}
