@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
+import { getS3UploadMode } from "@/lib/s3-upload-mode";
 import UploadClient from "./UploadClient";
 
 export default async function UploadPage({
@@ -21,7 +22,11 @@ export default async function UploadPage({
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-zinc-50" />}>
-      <UploadClient token={token} eventId={event.id} />
+      <UploadClient
+        token={token}
+        eventId={event.id}
+        uploadMode={getS3UploadMode()}
+      />
     </Suspense>
   );
 }

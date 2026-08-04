@@ -12,6 +12,7 @@ function parseHostname(url: string | undefined): string | null {
 const s3Hostname = parseHostname(process.env.S3_PUBLIC_URL);
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["snaps.arkea.tech"],
   images: {
     remotePatterns: [
       ...(s3Hostname

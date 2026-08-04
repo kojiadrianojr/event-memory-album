@@ -2,7 +2,7 @@
 
 ## Overview
 
-Full-stack Next.js 16 (App Router) + PostgreSQL app for hosts to gather photos/videos from guests. Guests authenticate with personal invite codes or event codes (signed-cookie session); hosts use a private admin token. Deployed on Vercel.
+Full-stack Next.js 16 (App Router) + PostgreSQL app for hosts to gather photos/videos from guests. Guests authenticate with personal invite codes or event codes (signed-cookie session); hosts use a private admin token. Deployed via Docker Compose with optional Pangolin/Newt tunnel for public HTTPS.
 
 Local development runs via Docker Compose for infrastructure — no cloud accounts required. PostgreSQL and MinIO are S3/Postgres-compatible so the same application code runs unchanged in all environments. Day-to-day dev uses **`make docker:up` + `make app:dev`**; see the [Makefile](../Makefile) and [AGENTS.md](../AGENTS.md).
 
@@ -13,10 +13,10 @@ Local development runs via Docker Compose for infrastructure — no cloud accoun
 | Layer | Local Dev | Production |
 |---|---|---|
 | Framework | Next.js 16 (App Router, TypeScript, Tailwind CSS 4) | same |
-| Backend | Next.js dev server (`make app:dev`) | Next.js API routes (Node.js serverless on Vercel) |
-| Database | PostgreSQL 16 container (`make docker:up`) | PostgreSQL via Supabase (Prisma ORM) |
-| Storage | MinIO container (S3-compatible) | Cloudflare R2 (S3-compatible) |
-| Deployment | `make docker:up` + `make app:dev`, or `make docker:full` | Vercel (`make deploy:prod`) |
+| Backend | Next.js dev server (`make app:dev`) | Next.js in Docker (`make docker:full`) |
+| Database | PostgreSQL 16 container (`make docker:up`) | PostgreSQL 16 container |
+| Storage | MinIO container (S3-compatible) | MinIO container (S3-compatible) |
+| Deployment | `make docker:up` + `make app:dev`, or `make docker:full` | `make docker:full` + Pangolin/Newt (see [deploy.md](./deploy.md)) |
 
 ---
 
@@ -167,10 +167,10 @@ photo-album/
 
 ### Phase 7 — Polish & Deploy
 
-28. `next.config.ts` — add `remotePatterns` for both MinIO (`localhost:9000`) and R2 domain to enable `next/image` optimisation in all environments
+28. `next.config.ts` — add `remotePatterns` for MinIO hostname to enable `next/image` optimisation
 29. Mobile-first Tailwind polish (upload flow especially)
 30. Run full verification checklist locally (`make docker:up` + `make app:dev`, or `make share:local` for LAN)
-31. Deploy to Vercel (`make deploy:prod`) + set production env vars
+31. Deploy with `make docker:full` + configure Pangolin/Newt (see [deploy.md](./deploy.md))
 32. Smoke-test all flows on production URL
 
 ---
@@ -178,7 +178,7 @@ photo-album/
 ## Upload Flow (Presigned URL)
 
 ```
-Client                        API Route                    MinIO (local) / R2 (prod)
+Client                        API Route                    MinIO
   |                               |                              |
   |-- POST /api/upload/presigned -->                             |
   |   { filename, mimeType, token }                              |
@@ -254,7 +254,7 @@ SESSION_SECRET=dev-insecure-session-secret
 - [x] Rate limiting → 429 after threshold on event creation
 - [x] API auth → guest writes require access token
 - [ ] Mobile: `make share:local` → scan QR on phone → upload → appears on desktop gallery
-- [ ] `make deploy:prod` + full smoke test on production URL
+- [ ] `make docker:full` + full smoke test on production URL (Pangolin)
 
 ---
 
@@ -277,11 +277,11 @@ SESSION_SECRET=dev-insecure-session-secret
 
 ## Further Considerations (Post-v1)
 
-1. **Video thumbnail generation** — Add a Vercel Cron job using `fluent-ffmpeg` to extract first frames asynchronously after upload
+1. **Video thumbnail generation** — Add a background job using `fluent-ffmpeg` to extract first frames asynchronously after upload
 2. ~~**Rate limiting**~~ — Done: IP-based limits on event creation, presigned uploads, media recording (`lib/rate-limit.ts`)
 3. ~~**R2 object deletion**~~ — Done: `DELETE /api/media/[id]` removes S3 object when URL matches `S3_PUBLIC_URL`
 4. ~~**Bulk download**~~ — Done: admin ZIP export at `/api/admin/{adminToken}/export`
 5. ~~**Event sharing page**~~ — Done: view-only gallery at `/view/{viewToken}`
 6. ~~**Photo thumbnails**~~ — Done: `lib/thumbnail.ts` generates a webp thumbnail on upload; feed/grid use it, lightbox uses full-res
-7. **Distributed rate limits** — Optional Upstash Redis for production (`UPSTASH_REDIS_REST_*` env vars)
+7. ~~**Distributed rate limits**~~ — Done: Docker Redis via `REDIS_URL` (in-memory fallback when unset)
 8. ~~**Media pagination**~~ — Backend supports it: `GET /api/events/[token]/media?cursor=&limit=` returns `{ items, nextCursor }`; opt-in so existing callers are unaffected. Gallery UI still loads the full list — wiring up infinite scroll on the client is future work

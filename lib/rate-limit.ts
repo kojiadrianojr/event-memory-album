@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getRedis } from "@/lib/redis";
-import { upstashCommand } from "@/lib/upstash";
 
 export type RateLimitConfig = {
   /** Namespace for this limiter (e.g. "create-event"). */
@@ -103,26 +102,6 @@ function windowIncrementResult(
   };
 }
 
-async function upstashIncrement(
-  key: string,
-  config: RateLimitConfig
-): Promise<IncrementResult | null> {
-  const windowStart = Math.floor(Date.now() / config.windowMs);
-  const redisKey = `ratelimit:${config.bucket}:${key}:${windowStart}`;
-
-  const count = (await upstashCommand(`incr/${encodeURIComponent(redisKey)}`)) as
-    | number
-    | null;
-  if (count === null) return null;
-
-  if (count === 1) {
-    const ttlSec = Math.ceil(config.windowMs / 1000);
-    await upstashCommand(`expire/${encodeURIComponent(redisKey)}/${ttlSec}`);
-  }
-
-  return windowIncrementResult(count, config, windowStart);
-}
-
 async function redisIncrement(
   key: string,
   config: RateLimitConfig
@@ -149,9 +128,6 @@ async function increment(
   config: RateLimitConfig
 ): Promise<IncrementResult> {
   const key = `${config.bucket}:${identifier}`;
-
-  const upstash = await upstashIncrement(key, config);
-  if (upstash) return upstash;
 
   const redis = await redisIncrement(key, config);
   if (redis) return redis;

@@ -6,16 +6,16 @@ Full-stack private event photo-sharing app. See [docs/plan.md](docs/plan.md) for
 
 Core v1 is **feature-complete** for local development. Phases 1–7 in `docs/plan.md` and QA remediation phases 1–6 are done. Remaining before production sign-off:
 
-- Full smoke test on a Vercel production deploy (`make deploy:prod`)
+- Full smoke test on the self-hosted Docker stack (`make docker:full`) via Pangolin
 - End-to-end mobile test via LAN sharing (`make share:local`)
 
 ## Stack
 
 - **Framework**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4
-- **Database**: PostgreSQL 16 via Prisma ORM (local: Docker; prod: Supabase)
-- **Storage**: S3-compatible object store (local: MinIO via Docker; prod: Cloudflare R2)
-- **Cache / rate limits**: Redis 7 (local: Docker; prod: Upstash Redis REST)
-- **Deploy**: Vercel (API routes as Node.js serverless functions)
+- **Database**: PostgreSQL 16 via Prisma ORM (Docker)
+- **Storage**: S3-compatible object store (MinIO via Docker)
+- **Cache / rate limits**: Redis 7 (Docker; falls back to in-memory when unset)
+- **Deploy**: Docker Compose (`make docker:full`) + optional Pangolin/Newt tunnel
 - **Tests**: Vitest unit tests in `lib/__tests__/` (no DB/containers required)
 
 ## Dev Environment
@@ -63,12 +63,10 @@ make share:local    # same, but prints a LAN URL for phone testing
 | `make docker:full` | Build and run entire stack in Docker |
 | `make share:local` | Full stack + LAN share URL |
 | `make db:migrate` | Apply Prisma migrations (dev) |
-| `make db:migrate:deploy` | Apply migrations to production (Supabase) |
+| `make db:migrate:deploy` | Apply migrations to production Docker Postgres |
 | `make db:generate` | Regenerate Prisma client |
 | `make db:studio` | Open Prisma Studio |
 | `make db:push` | Push schema without migration (prototyping only) |
-| `make deploy:prod` | Deploy to Vercel production |
-| `make deploy:preview` | Deploy a Vercel preview |
 
 **Services (local):**
 
@@ -77,7 +75,7 @@ make share:local    # same, but prints a LAN URL for phone testing
 - PostgreSQL: `postgresql://postgres:postgres@localhost:5432/photoalbum`
 - Redis: `redis://localhost:6379` (rate limiting; optional — falls back to in-memory when unset)
 
-Copy env vars from `.env.local.example`. Set `HOST_ACCESS_SECRET` before creating events. Production database: [docs/supabase-setup.md](docs/supabase-setup.md). Production storage: [docs/r2-setup.md](docs/r2-setup.md). Production Redis: [docs/upstash-setup.md](docs/upstash-setup.md).
+Copy env vars from `.env.local.example`. Set `HOST_ACCESS_SECRET` before creating events. Production deployment: [docs/deploy.md](docs/deploy.md).
 
 ## Project Structure
 
@@ -112,7 +110,7 @@ components/
   ui/                           # QRCodeDisplay, InviteLogin, InviteListBuilder, HostAccessLogin,
                                 # TokenInput, GuestNamePrompt, SwitchGuestButton, CopyButton, …
 lib/
-  db.ts, s3.ts, redis.ts, cache.ts, cache-keys.ts, cache-invalidate.ts, upstash.ts
+  db.ts, s3.ts, redis.ts, cache.ts, cache-keys.ts, cache-invalidate.ts
   thumbnail.ts, tokens.ts, validations.ts, event-auth.ts, rate-limit.ts
   idempotency.ts, presence.ts, wall-contributors.ts
   post-helpers.ts               # Post create/delete, thumbnail helpers, shared includes
@@ -127,7 +125,7 @@ lib/
 prisma/schema.prisma
 proxy.ts                        # Edge guard: guest session on /event/*; host access on /create
 Dockerfile                      # Multi-stage image for make docker:full
-docker-compose.yml              # db + storage (+ app under profile "full")
+docker-compose.yml              # db + storage + redis (+ app + newt under profile "full")
 Makefile                        # Task runner — preferred entry point for dev commands
 ```
 
@@ -167,17 +165,9 @@ Gallery items are **`Post`** records; each post holds one or more **`Media`** ro
 
 ## Storage Convention
 
-`S3_ENDPOINT` is the only difference between local MinIO and production R2. No code changes between environments.
+All media is stored in MinIO (S3-compatible) via Docker. Configure credentials with generic `S3_*` env vars in [`lib/s3.ts`](lib/s3.ts).
 
-```bash
-# Local (.env.local)
-S3_ENDPOINT=http://localhost:9000
-
-# Production
-S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
-```
-
-All S3 credentials use generic `S3_*` names (not `R2_*`) so `lib/s3.ts` is environment-agnostic. For `make docker:full` / `make share:local`, see `DOCKER_DATABASE_URL`, `HOST_IP`, and `COOKIE_SECURE` in `.env.local.example`.
+For `make docker:full` / `make share:local`, see `DOCKER_DATABASE_URL`, `HOST_IP`, `APP_HOST`, and `COOKIE_SECURE` in `.env.local.example`.
 
 ## Key Conventions
 
@@ -186,15 +176,15 @@ All S3 credentials use generic `S3_*` names (not `R2_*`) so `lib/s3.ts` is envir
   - **Multi photo/video batch**: `POST /api/posts` (one post, up to 10 media items — see `lib/upload-limits.ts`)
   - **Text memory or single audio**: `POST /api/media` (creates a post with one media row)
 - Guest write APIs require the 8-char `accessToken` in the request body — view tokens are rejected
-- Rate limits (IP-based, 429 on exceed): event creation, presigned uploads, media/post recording, host access login, invite auth — see `lib/rate-limit.ts` and `.env.local.example`. Local Docker Redis via `REDIS_URL`; production Upstash Redis REST via `UPSTASH_REDIS_REST_*` (falls back to in-memory when neither is set).
+- Rate limits (IP-based, 429 on exceed): event creation, presigned uploads, media/post recording, host access login, invite auth — see `lib/rate-limit.ts` and `.env.local.example`. Docker Redis via `REDIS_URL` (falls back to in-memory when unset).
 - Redis caching (`lib/cache.ts`): event token lookups, gallery feed/moments/prompts/wall API responses, invite lookup — TTLs via `CACHE_TTL_*` env vars; graceful DB fallback when Redis is unset.
 - Guest wall presence (`lib/presence.ts`): heartbeats on the wall tab only; online indicators via sorted-set TTL window (`PRESENCE_TTL_SEC`).
-- Upload idempotency (`lib/idempotency.ts`): optional `idempotencyKey` on `POST /api/posts` and `POST /api/media` prevents duplicate posts on client retry; requires Redis/Upstash to dedupe.
+- Upload idempotency (`lib/idempotency.ts`): optional `idempotencyKey` on `POST /api/posts` and `POST /api/media` prevents duplicate posts on client retry; requires Redis to dedupe.
 - Guest name comes from invite-code or event-code login (stored in `localStorage`; `GuestNamePrompt` only if no session name). Upserted into `Guest`. "Not you?" (`SwitchGuestButton`) clears storage and calls `POST /api/auth/logout`.
 - Guest write APIs still trust the name in the request body (pre-filled from session); the signed session cookie is the gate
 - Photo thumbnails: generated server-side via `sharp` during post/media recording; feed uses `mediaFileUrl(id, { thumb: true })`, lightbox uses full size. Best-effort — failures never block upload
 - Reactions: shared helpers in `lib/reactions.ts`; `ReactionBar` supports feed/lightbox layouts. Tap emoji to toggle (guests only); tap count to open reactor list (`ReactionReactorsSheet`). Multi-media posts show a stack badge in the feed; lightbox uses YARL Counter plus a desktop side engagement panel (`md+`).
 - Video thumbnails are `null` in v1 — generic placeholder in UI
 - Delete: `DELETE /api/posts/[id]` (admin) removes post, media rows, reactions, comments, and storage objects
-- `bcryptjs` (not `bcrypt`) — pure JS, no native build needed on Vercel
+- `bcryptjs` (not `bcrypt`) — pure JS, no native build needed
 - `proxy.ts` (not `middleware.ts`) — Next.js proxy matcher for `/event/*` and `/create`; crypto helpers in `*-crypto.ts` files must stay Edge-safe (Web Crypto only)

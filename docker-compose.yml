@@ -60,6 +60,8 @@ services:
       mc alias set local http://storage:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
       mc mb --ignore-existing local/$$S3_BUCKET_NAME;
       mc anonymous set public local/$$S3_BUCKET_NAME;
+      printf '%s\n' '[{"AllowedOrigin":["*"],"AllowedMethod":["GET","PUT","HEAD"],"AllowedHeader":["*"],"ExposeHeader":["ETag"]}]' > /tmp/cors.json;
+      mc cors set local/$$S3_BUCKET_NAME /tmp/cors.json || true;
       exit 0;
       "
 
@@ -80,7 +82,7 @@ services:
       createbuckets:
         condition: service_completed_successfully
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_HOST:-localhost}:${APP_PORT:-3000}:3000"
     environment:
       # In-container DB host; npm run dev uses DATABASE_URL from .env.local (localhost).
       # Override both URLs — .env.local DIRECT_URL points at localhost and would
@@ -91,11 +93,27 @@ services:
       # testing the app (LAN IP for sharing, defaults to localhost).
       # The guest browser PUTs directly to this host via a presigned URL,
       # so it can't be an internal-only Docker service name like "storage".
+      # Presigned URLs use HOST_IP (browser-reachable). Direct uploads use
+      # S3_INTERNAL_ENDPOINT so the app container talks to MinIO over Docker DNS.
       S3_ENDPOINT: http://${HOST_IP:-localhost}:${S3_PORT:-9000}
+      S3_INTERNAL_ENDPOINT: http://storage:9000
       S3_PUBLIC_URL: http://${HOST_IP:-localhost}:${S3_PORT:-9000}/${S3_BUCKET_NAME:-photo-album}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
-
+    
+  newt:
+    image: fosrl/newt
+    container_name: newt
+    profiles: ["full"]
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      PANGOLIN_ENDPOINT: ${PANGOLIN_ENDPOINT}
+      NEWT_ID: ${NEWT_ID}
+      NEWT_SECRET: ${NEWT_SECRET}
+    
 volumes:
   pgdata:
   miniodata:

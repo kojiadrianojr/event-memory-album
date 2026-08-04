@@ -1,5 +1,4 @@
 import { getRedis } from "@/lib/redis";
-import { upstashCommand, upstashPipeline } from "@/lib/upstash";
 
 function serialize(value: unknown): string {
   return JSON.stringify(value);
@@ -13,54 +12,7 @@ function deserialize<T>(raw: string): T | null {
   }
 }
 
-async function upstashGet(key: string): Promise<string | null> {
-  const result = (await upstashCommand(`get/${encodeURIComponent(key)}`)) as
-    | string
-    | null;
-  return result;
-}
-
-async function upstashSet(
-  key: string,
-  value: string,
-  ttlSec: number
-): Promise<boolean> {
-  const result = await upstashCommand(
-    `set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSec}`
-  );
-  return result === "OK";
-}
-
-async function upstashSetNx(
-  key: string,
-  value: string,
-  ttlSec: number
-): Promise<boolean> {
-  const results = await upstashPipeline(["SET", key, value, "NX", "EX", ttlSec]);
-  if (!results) return false;
-  const first = results[0] as string | null;
-  return first === "OK";
-}
-
-async function upstashDel(...keys: string[]): Promise<void> {
-  if (keys.length === 0) return;
-  const path = keys.map((k) => encodeURIComponent(k)).join("/");
-  await upstashCommand(`del/${path}`);
-}
-
-async function upstashIncr(key: string): Promise<number | null> {
-  const result = (await upstashCommand(`incr/${encodeURIComponent(key)}`)) as
-    | number
-    | null;
-  return result;
-}
-
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  const upstashRaw = await upstashGet(key);
-  if (upstashRaw !== null) {
-    return deserialize<T>(upstashRaw);
-  }
-
   const redis = await getRedis();
   if (redis) {
     try {
@@ -79,18 +31,13 @@ export async function cacheSet(
   value: unknown,
   ttlSec: number
 ): Promise<void> {
-  const serialized = serialize(value);
-
-  const upstashOk = await upstashSet(key, serialized, ttlSec);
-  if (upstashOk) return;
-
   const redis = await getRedis();
-  if (redis) {
-    try {
-      await redis.set(key, serialized, { EX: ttlSec });
-    } catch {
-      // no-op
-    }
+  if (!redis) return;
+
+  try {
+    await redis.set(key, serialize(value), { EX: ttlSec });
+  } catch {
+    // no-op
   }
 }
 
@@ -100,53 +47,39 @@ export async function cacheSetNx(
   value: unknown,
   ttlSec: number
 ): Promise<boolean> {
-  const serialized = serialize(value);
-
-  const upstashOk = await upstashSetNx(key, serialized, ttlSec);
-  if (upstashOk) return true;
-
   const redis = await getRedis();
-  if (redis) {
-    try {
-      const result = await redis.set(key, serialized, { NX: true, EX: ttlSec });
-      return result === "OK";
-    } catch {
-      return false;
-    }
-  }
+  if (!redis) return false;
 
-  return false;
+  try {
+    const result = await redis.set(key, serialize(value), { NX: true, EX: ttlSec });
+    return result === "OK";
+  } catch {
+    return false;
+  }
 }
 
 export async function cacheDel(...keys: string[]): Promise<void> {
   if (keys.length === 0) return;
 
-  await upstashDel(...keys);
-
   const redis = await getRedis();
-  if (redis) {
-    try {
-      await redis.del(keys);
-    } catch {
-      // no-op
-    }
+  if (!redis) return;
+
+  try {
+    await redis.del(keys);
+  } catch {
+    // no-op
   }
 }
 
 export async function cacheIncr(key: string): Promise<number | null> {
-  const upstashResult = await upstashIncr(key);
-  if (upstashResult !== null) return upstashResult;
-
   const redis = await getRedis();
-  if (redis) {
-    try {
-      return await redis.incr(key);
-    } catch {
-      return null;
-    }
-  }
+  if (!redis) return null;
 
-  return null;
+  try {
+    return await redis.incr(key);
+  } catch {
+    return null;
+  }
 }
 
 /** Read feed version; defaults to 0 when unset or Redis unavailable. */
@@ -157,13 +90,6 @@ export async function cacheGetVersion(key: string): Promise<number> {
   const raw = await cacheGet<string>(key);
   if (raw !== null) {
     const n = parseInt(String(raw), 10);
-    if (Number.isFinite(n)) return n;
-  }
-
-  // Version keys store plain integers via INCR — try direct string read
-  const upstashRaw = await upstashGet(key);
-  if (upstashRaw !== null) {
-    const n = parseInt(upstashRaw, 10);
     if (Number.isFinite(n)) return n;
   }
 

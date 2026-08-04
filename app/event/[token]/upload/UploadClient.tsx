@@ -8,6 +8,7 @@ import { extractTakenAt } from "@/lib/exif";
 import { isVideoFile, mimeFromFilename, resolveVideoMimeType } from "@/lib/mime-from-url";
 import { MAX_PHOTOS_PER_POST } from "@/lib/upload-limits";
 import { fetchWithRetry, runWithConcurrency } from "@/lib/upload-queue";
+import type { S3UploadMode } from "@/lib/s3-upload-mode";
 import { prepareVideoForUpload, prefetchFfmpeg } from "@/lib/video-transcode";
 import { useGuestName } from "@/lib/use-guest-name";
 import { EventMoment, EventPrompt } from "@/components/gallery/types";
@@ -55,9 +56,14 @@ function isAudioFile(file: File): boolean {
 interface UploadClientProps {
   token: string;
   eventId: string;
+  uploadMode?: S3UploadMode;
 }
 
-export default function UploadClient({ token, eventId }: UploadClientProps) {
+export default function UploadClient({
+  token,
+  eventId,
+  uploadMode = "presigned",
+}: UploadClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialPromptId = searchParams.get("promptId");
@@ -218,6 +224,70 @@ export default function UploadClient({ token, eventId }: UploadClientProps) {
     setAudioFileItems((prev) => prev.filter((item) => item.id !== id));
   }
 
+  async function uploadBlobViaApp(
+    blob: File | Blob,
+    filename: string,
+    mimeType: string,
+    itemId: string,
+    patchItem: (id: string, patch: ItemPatch) => void
+  ): Promise<string | null> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const objectKey = await new Promise<string>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const formData = new FormData();
+          const file =
+            blob instanceof File
+              ? blob
+              : new File([blob], filename, { type: mimeType });
+          formData.append("file", file);
+          formData.append("token", token);
+          formData.append("mimeType", mimeType);
+          formData.append("filename", filename);
+
+          xhr.open("POST", "/api/upload/direct");
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              patchItem(itemId, {
+                status: "uploading",
+                progress: Math.round((e.loaded / e.total) * 90),
+              });
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const data = JSON.parse(xhr.responseText) as {
+                  objectKey?: string;
+                };
+                if (data.objectKey) resolve(data.objectKey);
+                else reject(new Error("Upload response missing objectKey."));
+              } catch {
+                reject(new Error("Invalid upload response."));
+              }
+            } else {
+              reject(new Error(`Upload returned ${xhr.status}`));
+            }
+          };
+          xhr.onerror = () => reject(new Error("Network error during upload."));
+          xhr.send(formData);
+        });
+        return objectKey;
+      } catch (err) {
+        const isNetworkError =
+          err instanceof Error &&
+          err.message === "Network error during upload.";
+        if (attempt === 0 && isNetworkError) continue;
+        patchItem(itemId, {
+          status: "error",
+          errorMessage: err instanceof Error ? err.message : "Upload failed.",
+        });
+        return null;
+      }
+    }
+    return null;
+  }
+
   async function putBlobToStorage(
     blob: File | Blob,
     mimeType: string,
@@ -325,61 +395,87 @@ export default function UploadClient({ token, eventId }: UploadClientProps) {
     const takenAt =
       item.takenAt ?? (isMediaFile(item.file) ? await extractTakenAt(item.file) : undefined);
 
-    const presignedResult = await fetchWithRetry("/api/upload/presigned", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: uploadFile.name,
+    let objectKey: string;
+
+    if (uploadMode === "direct") {
+      const directKey = await uploadBlobViaApp(
+        uploadFile,
+        uploadFile.name,
         mimeType,
-        token,
-      }),
-    });
-    if (!presignedResult.ok) {
-      patchItem(item.id, {
-        status: "error",
-        errorMessage: presignedResult.errorMessage,
-      });
-      return null;
-    }
-    if (!presignedResult.response.ok) {
-      patchItem(item.id, {
-        status: "error",
-        errorMessage: "Failed to get upload URL.",
-      });
-      return null;
-    }
-
-    const { presignedUrl, objectKey } = await presignedResult.response.json();
-    const stored = await putBlobToStorage(
-      uploadFile,
-      mimeType,
-      presignedUrl,
-      item.id,
-      patchItem
-    );
-    if (!stored) return null;
-
-    if (pendingPoster) {
-      const posterPresigned = await fetchWithRetry("/api/upload/presigned", {
+        item.id,
+        patchItem
+      );
+      if (!directKey) return null;
+      objectKey = directKey;
+    } else {
+      const presignedResult = await fetchWithRetry("/api/upload/presigned", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          filename: pendingPoster.name,
-          mimeType: "image/jpeg",
+          filename: uploadFile.name,
+          mimeType,
           token,
         }),
       });
-      if (posterPresigned.ok && posterPresigned.response.ok) {
-        const { presignedUrl: posterUrl, objectKey: thumbKey } =
-          await posterPresigned.response.json();
-        const posterOk = await putBlobToStorage(
+      if (!presignedResult.ok) {
+        patchItem(item.id, {
+          status: "error",
+          errorMessage: presignedResult.errorMessage,
+        });
+        return null;
+      }
+      if (!presignedResult.response.ok) {
+        patchItem(item.id, {
+          status: "error",
+          errorMessage: "Failed to get upload URL.",
+        });
+        return null;
+      }
+
+      const presignedData = await presignedResult.response.json();
+      objectKey = presignedData.objectKey;
+      const stored = await putBlobToStorage(
+        uploadFile,
+        mimeType,
+        presignedData.presignedUrl,
+        item.id,
+        patchItem
+      );
+      if (!stored) return null;
+    }
+
+    if (pendingPoster) {
+      if (uploadMode === "direct") {
+        const thumbKey = await uploadBlobViaApp(
           pendingPoster,
+          pendingPoster.name,
           "image/jpeg",
-          posterUrl,
           item.id,
           patchItem
         );
-        if (posterOk) thumbnailObjectKey = thumbKey;
+        if (thumbKey) thumbnailObjectKey = thumbKey;
+      } else {
+        const posterPresigned = await fetchWithRetry("/api/upload/presigned", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: pendingPoster.name,
+            mimeType: "image/jpeg",
+            token,
+          }),
+        });
+        if (posterPresigned.ok && posterPresigned.response.ok) {
+          const { presignedUrl: posterUrl, objectKey: thumbKey } =
+            await posterPresigned.response.json();
+          const posterOk = await putBlobToStorage(
+            pendingPoster,
+            "image/jpeg",
+            posterUrl,
+            item.id,
+            patchItem
+          );
+          if (posterOk) thumbnailObjectKey = thumbKey;
+        }
       }
     }
 

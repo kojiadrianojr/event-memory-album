@@ -83,7 +83,7 @@ curl -X POST /api/media -d '{"objectKey":"events/other/...",...}'
 ### Planned changes
 
 1. IP-based limits on `POST /api/events`, `POST /api/upload/presigned`, `POST /api/media`.
-2. In-memory store for local dev; optional Upstash Redis REST API for production (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`).
+2. In-memory store when Redis is unset; Docker Redis via `REDIS_URL` for distributed limits.
 
 ### Defaults
 
@@ -155,7 +155,7 @@ Override via `RATE_LIMIT_CREATE_EVENT`, `RATE_LIMIT_PRESIGNED`, `RATE_LIMIT_RECO
 
 - Added `lib/rate-limit.ts` with IP-based fixed-window limits and 429 + `Retry-After` responses.
 - Applied to `POST /api/events`, `POST /api/upload/presigned`, `POST /api/media`.
-- In-memory store for local dev; optional Upstash Redis REST when env vars are set.
+- In-memory store when Redis is unset; Docker Redis via `REDIS_URL` when configured.
 - Configurable limits via `RATE_LIMIT_*` env vars (see `.env.local.example`).
 
 ---

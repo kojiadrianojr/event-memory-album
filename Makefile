@@ -1,14 +1,8 @@
-# Photo Album — task runner
-# Run `make` or `make help` to list available commands.
-
-.DEFAULT_GOAL := help
-
 .PHONY: help setup env \
 	app\:install app\:dev app\:build app\:start app\:lint app\:test \
 	docker\:up docker\:down docker\:reset docker\:logs docker\:full \
 	share\:local \
-	db\:migrate db\:migrate\:deploy db\:generate db\:studio db\:push \
-	deploy\:prod deploy\:preview deploy\:env\:prod
+	db\:migrate db\:migrate\:deploy db\:generate db\:studio db\:push
 
 help: ## Show this help
 	@awk 'BEGIN {FS = "## "} \
@@ -90,7 +84,7 @@ share\:local: ## Full stack + print LAN URL for network testing
 db\:migrate: ## Apply migrations and regenerate client
 	npx prisma migrate dev
 
-db\:migrate\:deploy: ## Apply pending migrations (production / Supabase)
+db\:migrate\:deploy: ## Apply pending migrations (production Docker stack)
 	npx prisma migrate deploy
 
 db\:generate: ## Regenerate Prisma client
@@ -101,14 +95,3 @@ db\:studio: ## Open Prisma Studio
 
 db\:push: ## Push schema without a migration (prototyping only)
 	npx prisma db push
-
-## Deploy (Vercel)
-deploy\:env\:prod: ## Upload .env.production to Vercel (production)
-	@test -f .env.production || (echo "Missing .env.production — add production secrets before uploading." && exit 1)
-	node scripts/vercel-env-push.mjs .env.production production
-
-deploy\:prod: ## Deploy to production
-	npx vercel --prod
-
-deploy\:preview: ## Deploy a preview
-	npx vercel

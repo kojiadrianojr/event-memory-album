@@ -22,27 +22,24 @@ This guide covers the **tech stack**, **features with testing instructions**, an
 
 | Technology | Version | Purpose | Why It Matters |
 |---|---|---|---|
-| **Next.js** | 16 (App Router) | Full-stack React framework — pages, layouts, and API routes in one project | Provides server-rendered pages for fast loads, file-based routing, and serverless API handlers deployable to Vercel without a separate backend |
+| **Next.js** | 16 (App Router) | Full-stack React framework — pages, layouts, and API routes in one project | Provides server-rendered pages for fast loads, file-based routing, and API handlers in a single Node.js process |
 | **React** | 19 | UI component library | Powers all interactive client components (gallery, upload, lightbox, forms) |
 | **TypeScript** | 5 | Static typing across frontend and backend | Catches errors at build time; shared types between API routes and components |
 | **Tailwind CSS** | 4 | Utility-first styling | Mobile-first responsive design with consistent spacing, colors, and layout |
 
 ### Data & Storage
 
-| Technology | Local Dev | Production | Purpose | Why It Matters |
-|---|---|---|---|---|
-| **PostgreSQL** | Docker (`postgres:16-alpine`) | Supabase | Relational database for events, media metadata, guests, reactions, comments | Stores all structured data; Prisma migrations keep schema consistent across environments |
-| **Prisma ORM** | — | — | Type-safe database client and schema migrations | Single source of truth for the data model; auto-generated TypeScript types |
-| **MinIO** | Docker | — | S3-compatible object storage for local dev | Lets you develop and test file uploads without cloud credentials |
-| **Cloudflare R2** | — | Production | S3-compatible object storage | Stores photos, videos, and audio files with zero egress fees; same API as MinIO |
-
-The app uses generic `S3_*` environment variables. Only `S3_ENDPOINT` changes between local MinIO and production R2 — **no code changes** between environments.
+| Technology | Purpose | Why It Matters |
+|---|---|---|
+| **PostgreSQL** | Relational database for events, media metadata, guests, reactions, comments | Stores all structured data; Prisma migrations keep schema consistent |
+| **Prisma ORM** | Type-safe database client and schema migrations | Single source of truth for the data model; auto-generated TypeScript types |
+| **MinIO** | S3-compatible object storage | Stores photos, videos, and audio files; same API locally and in production Docker |
 
 ### Key Libraries
 
 | Library | Purpose | Why It Matters |
 |---|---|---|
-| `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` | Generate presigned PUT URLs for direct client-to-storage uploads | Files never pass through the Next.js server, reducing bandwidth and latency on Vercel |
+| `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` | Generate presigned PUT URLs for direct client-to-storage uploads | Files never pass through the Next.js server, reducing bandwidth and latency |
 | `nanoid` | Generate 8-character guest/view tokens | Short, typeable codes for QR codes and manual entry |
 | `bcryptjs` | Hash admin tokens before storage | Admin tokens are high-entropy UUIDs; bcrypt prevents exposure if the database is compromised |
 | `sharp` | Server-side photo thumbnail generation | Creates optimized thumbnails for gallery grid performance |
@@ -56,26 +53,26 @@ The app uses generic `S3_*` environment variables. Only `S3_ENDPOINT` changes be
 
 ### Deployment & Infrastructure
 
-| Layer | Local | Production |
+| Layer | Local dev | Production |
 |---|---|---|
-| App server | `npm run dev` (port 3000) | Vercel (Node.js serverless functions) |
-| Database | Docker Compose → `localhost:5432` | Supabase PostgreSQL |
-| File storage | Docker Compose → MinIO `localhost:9000` | Cloudflare R2 |
-| Rate limiting | Redis (`REDIS_URL`) or in-memory | Upstash Redis REST (`UPSTASH_REDIS_REST_*`) |
-| API caching / presence / idempotency | Redis (`REDIS_URL`) or passthrough | Upstash Redis REST (`UPSTASH_REDIS_REST_*`) |
+| App server | `npm run dev` (port 3000) | Docker (`make docker:full`) |
+| Database | Docker Compose → `localhost:5432` | Docker Compose → `db` service |
+| File storage | Docker Compose → MinIO `localhost:9000` | Docker Compose → MinIO |
+| Rate limiting / cache | Redis (`REDIS_URL`) or in-memory | Redis (`DOCKER_REDIS_URL`) or in-memory |
+| Public access | `localhost` or LAN (`make share:local`) | Pangolin/Newt tunnel (optional) |
 
 ### Architecture Overview
 
 ```
 ┌─────────────┐     presigned URL      ┌──────────────┐
-│   Browser   │ ──────────────────────►│ MinIO / R2   │
+│   Browser   │ ──────────────────────►│    MinIO     │
 │  (React UI) │                        │ (file store) │
 └──────┬──────┘                        └──────────────┘
        │ API routes
        ▼
 ┌─────────────┐     Prisma ORM         ┌──────────────┐
 │  Next.js    │ ──────────────────────►│  PostgreSQL  │
-│  (Vercel)   │                        │  (metadata)  │
+│  (Docker)   │                        │  (metadata)  │
 └─────────────┘                        └──────────────┘
 ```
 
@@ -278,11 +275,11 @@ IP-based limits protect open endpoints:
 | `POST /api/upload/presigned` | 60 requests | 1 minute |
 | `POST /api/posts` / `POST /api/media` | 120 requests | 1 minute |
 
-Override via `RATE_LIMIT_*` env vars. Production can use Upstash Redis for distributed limits.
+Override via `RATE_LIMIT_*` env vars. Redis (`REDIS_URL`) provides distributed limits across app instances.
 
 ### Redis caching & presence
 
-When `REDIS_URL` (local) or `UPSTASH_REDIS_REST_*` (production) is set, the app caches event lookups, gallery feed slices, moments/prompts lists, and wall contributor counts. TTLs are configurable via `CACHE_TTL_*` env vars (see `.env.local.example`). Without Redis, all reads go directly to PostgreSQL.
+When `REDIS_URL` is set, the app caches event lookups, gallery feed slices, moments/prompts lists, and wall contributor counts. TTLs are configurable via `CACHE_TTL_*` env vars (see `.env.local.example`). Without Redis, all reads go directly to PostgreSQL.
 
 - **Guest wall presence:** guests on the wall tab send heartbeats; others appear with an online indicator for `PRESENCE_TTL_SEC` (default 90s).
 - **Upload idempotency:** the upload UI sends an `idempotencyKey` so retried `POST /api/posts` or `POST /api/media` after a successful S3 upload do not create duplicate posts (requires Redis).
@@ -540,4 +537,5 @@ See [AGENTS.md](../AGENTS.md) for agent conventions and the complete Makefile re
 
 - [docs/plan.md](plan.md) — Full specification, schema, and implementation phases
 - [docs/qa-remediation.md](qa-remediation.md) — QA fixes and verification status
+- [docs/deploy.md](deploy.md) — Self-hosted Docker deployment
 - [AGENTS.md](../AGENTS.md) — Agent/developer conventions for this repo

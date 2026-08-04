@@ -1,6 +1,5 @@
 import { getRedis } from "@/lib/redis";
 import { PRESENCE_TTL_SEC, presenceKey } from "@/lib/cache-keys";
-import { upstashPipeline } from "@/lib/upstash";
 
 /** Minimum score (ms) for a guest to count as online. Exported for tests. */
 export function presenceMinScore(nowMs: number): number {
@@ -15,13 +14,6 @@ export async function recordPresence(
   const now = Date.now();
   const minScore = presenceMinScore(now);
   const expireSec = PRESENCE_TTL_SEC * 2;
-
-  const pipelineResult = await upstashPipeline(
-    ["ZADD", key, now, guestName],
-    ["ZREMRANGEBYSCORE", key, 0, minScore],
-    ["EXPIRE", key, expireSec]
-  );
-  if (pipelineResult) return;
 
   const redis = await getRedis();
   if (!redis) return;
@@ -38,16 +30,6 @@ export async function recordPresence(
 export async function listPresence(eventId: string): Promise<string[]> {
   const key = presenceKey(eventId);
   const minScore = presenceMinScore(Date.now());
-
-  const pipelineResult = await upstashPipeline([
-    "ZRANGEBYSCORE",
-    key,
-    minScore,
-    "+inf",
-  ]);
-  if (pipelineResult && Array.isArray(pipelineResult[0])) {
-    return pipelineResult[0] as string[];
-  }
 
   const redis = await getRedis();
   if (!redis) return [];

@@ -6,16 +6,35 @@ import {
 } from "@aws-sdk/client-s3";
 import type { Readable } from "stream";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getS3UploadMode } from "@/lib/s3-upload-mode";
 
-export const s3 = new S3Client({
-  region: "auto",
-  endpoint: process.env.S3_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
-  },
-  forcePathStyle: true,
-});
+function resolveS3Endpoint(): string {
+  const endpoint = process.env.S3_ENDPOINT;
+  if (!endpoint) {
+    throw new Error("S3_ENDPOINT is not configured");
+  }
+  if (getS3UploadMode() === "direct" && process.env.S3_INTERNAL_ENDPOINT) {
+    return process.env.S3_INTERNAL_ENDPOINT;
+  }
+  return endpoint;
+}
+
+let s3Client: S3Client | undefined;
+
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      region: "auto",
+      endpoint: resolveS3Endpoint(),
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+      },
+      forcePathStyle: true,
+    });
+  }
+  return s3Client;
+}
 
 export async function createPresignedPutUrl(
   objectKey: string,
@@ -27,7 +46,7 @@ export async function createPresignedPutUrl(
     Key: objectKey,
     ContentType: mimeType,
   });
-  return getSignedUrl(s3, command, { expiresIn });
+  return getSignedUrl(getS3Client(), command, { expiresIn });
 }
 
 export async function deleteObject(objectKey: string): Promise<void> {
@@ -35,7 +54,7 @@ export async function deleteObject(objectKey: string): Promise<void> {
     Bucket: process.env.S3_BUCKET_NAME!,
     Key: objectKey,
   });
-  await s3.send(command);
+  await getS3Client().send(command);
 }
 
 export function getPublicUrl(objectKey: string): string {
@@ -74,7 +93,7 @@ export async function getObject(objectKey: string, range?: string) {
     Key: objectKey,
     ...(range ? { Range: range } : {}),
   });
-  return s3.send(command);
+  return getS3Client().send(command);
 }
 
 export async function getObjectBuffer(objectKey: string): Promise<Buffer> {
@@ -98,5 +117,5 @@ export async function putObject(
     Body: body,
     ContentType: contentType,
   });
-  await s3.send(command);
+  await getS3Client().send(command);
 }

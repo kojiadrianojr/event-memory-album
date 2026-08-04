@@ -7,6 +7,7 @@ describe("objectKeyFromPublicUrl", () => {
   beforeEach(() => {
     process.env = {
       ...originalEnv,
+      S3_ENDPOINT: "http://localhost:9000",
       S3_PUBLIC_URL: "http://localhost:9001/photo-album",
       S3_BUCKET_NAME: "photo-album",
     };
