@@ -45,7 +45,7 @@ export async function GET(
         eventId: event.id,
         ...(momentId ? { momentId } : {}),
       },
-      orderBy: [{ takenAt: "asc" }, { uploadedAt: "asc" }, { id: "asc" }],
+      orderBy: [{ uploadedAt: "asc" }, { id: "asc" }],
       include: postInclude,
       ...(limit
         ? {

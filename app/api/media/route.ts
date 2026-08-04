@@ -37,7 +37,6 @@ export async function POST(request: Request) {
     caption,
     uploaderName,
     eventId,
-    takenAt,
     momentId,
     promptId,
     idempotencyKey,
@@ -84,7 +83,6 @@ export async function POST(request: Request) {
             eventId,
             caption: caption?.trim() || null,
             uploaderName,
-            takenAt: takenAt ? new Date(takenAt) : null,
             momentId: momentId ?? null,
             promptId: promptId ?? null,
             media: {

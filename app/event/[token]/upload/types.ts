@@ -1,7 +1,6 @@
 export interface FileUploadItem {
   id: string;
   file: File;
-  takenAt?: string;
   status: "pending" | "compressing" | "uploading" | "stored" | "done" | "error";
   progress: number;
   errorMessage?: string;

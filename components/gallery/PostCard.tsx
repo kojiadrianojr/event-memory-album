@@ -255,7 +255,7 @@ export default function PostCard({
 
   const isOwner = !readOnly && post.uploaderName === guestName;
 
-  const date = post.takenAt ?? post.uploadedAt;
+  const date = post.uploadedAt;
   const asset = primaryMedia(post);
 
   async function handleCommentSubmit(e: React.FormEvent) {

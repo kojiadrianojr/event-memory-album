@@ -9,6 +9,7 @@ import AdminMediaGrid from "@/components/admin/AdminMediaGrid";
 import AdminMomentsManager from "@/components/admin/AdminMomentsManager";
 import AdminPromptsManager from "@/components/admin/AdminPromptsManager";
 import AdminExportButton from "@/components/admin/AdminExportButton";
+import { absoluteSiteUrl } from "@/lib/site-url";
 
 export default async function AdminPage({
   params,
@@ -49,7 +50,7 @@ export default async function AdminPage({
     where: { id: matchedId },
     include: {
       posts: {
-        orderBy: [{ takenAt: "asc" }, { uploadedAt: "asc" }],
+        orderBy: [{ uploadedAt: "asc" }],
         include: {
           media: { orderBy: { sortOrder: "asc" } },
         },
@@ -75,14 +76,9 @@ export default async function AdminPage({
     return acc;
   }, {});
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
-  const guestUrl = `${baseUrl}/event/${event.accessToken}`;
-  const viewUrl = `${baseUrl}/view/${event.viewToken}`;
-  const adminUrl = `${baseUrl}/admin/${adminToken}`;
+  const guestUrl = absoluteSiteUrl(`/event/${event.accessToken}`);
+  const viewUrl = absoluteSiteUrl(`/view/${event.viewToken}`);
+  const adminUrl = absoluteSiteUrl(`/admin/${adminToken}`);
 
   const allMedia = event.posts.flatMap((p) => p.media);
   const photoCount = allMedia.filter((m) => m.type === "PHOTO").length;
@@ -132,7 +128,7 @@ export default async function AdminPage({
             </a>
             <div className="flex flex-wrap gap-2 justify-end">
               <a
-                href={`${baseUrl}/event/${event.accessToken}/wall`}
+                href={absoluteSiteUrl(`/event/${event.accessToken}/wall`)}
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
               >
                 Guests

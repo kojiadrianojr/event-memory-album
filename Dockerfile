@@ -4,6 +4,9 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache openssl
 
+ARG NEXT_PUBLIC_WEBSITE_URL=
+ENV NEXT_PUBLIC_WEBSITE_URL=$NEXT_PUBLIC_WEBSITE_URL
+
 # Prisma schema references DATABASE_URL / DIRECT_URL; .env* are dockerignored.
 # Placeholders satisfy `prisma generate` only — migrate runs at container start.
 ENV DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/photoalbum"

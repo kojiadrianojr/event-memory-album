@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDropzone, type Accept } from "react-dropzone";
 import GuestNamePrompt from "@/components/ui/GuestNamePrompt";
-import { extractTakenAt } from "@/lib/exif";
 import { isVideoFile, mimeFromFilename, resolveVideoMimeType } from "@/lib/mime-from-url";
 import { MAX_PHOTOS_PER_POST } from "@/lib/upload-limits";
 import { fetchWithRetry, runWithConcurrency } from "@/lib/upload-queue";
@@ -31,7 +30,6 @@ type ItemPatch = Partial<
     | "progress"
     | "errorMessage"
     | "objectKey"
-    | "takenAt"
     | "thumbnailObjectKey"
     | "uploadFile"
     | "uploadMimeType"
@@ -392,9 +390,6 @@ export default function UploadClient({
       compressionNote,
     });
 
-    const takenAt =
-      item.takenAt ?? (isMediaFile(item.file) ? await extractTakenAt(item.file) : undefined);
-
     let objectKey: string;
 
     if (uploadMode === "direct") {
@@ -483,7 +478,6 @@ export default function UploadClient({
       status: "stored",
       progress: 100,
       objectKey,
-      takenAt,
       uploadFile,
       uploadMimeType: mimeType,
       thumbnailObjectKey,
@@ -496,7 +490,6 @@ export default function UploadClient({
       status: "stored",
       progress: 100,
       objectKey,
-      takenAt,
       uploadFile,
       uploadMimeType: mimeType,
       thumbnailObjectKey,
@@ -528,7 +521,6 @@ export default function UploadClient({
             (item.uploadMimeType ?? "").startsWith("video/")
               ? "VIDEO"
               : "PHOTO",
-          takenAt: item.takenAt,
           thumbnailObjectKey: item.thumbnailObjectKey,
         })),
       }),

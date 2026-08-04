@@ -64,14 +64,3 @@ export async function thumbnailUrlForType(
   if (type !== "PHOTO" || !objectKey) return null;
   return tryCreateThumbnailUrl(objectKey);
 }
-
-export function earliestTakenAt(
-  dates: (string | undefined)[]
-): Date | null {
-  const parsed = dates
-    .filter(Boolean)
-    .map((d) => new Date(d!))
-    .filter((d) => !Number.isNaN(d.getTime()));
-  if (parsed.length === 0) return null;
-  return new Date(Math.min(...parsed.map((d) => d.getTime())));
-}

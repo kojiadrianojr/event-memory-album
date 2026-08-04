@@ -33,7 +33,7 @@ interface GalleryClientProps {
 function groupByDay(items: PostItem[]): { day: string; items: PostItem[] }[] {
   const map = new Map<string, PostItem[]>();
   for (const item of items) {
-    const date = item.takenAt ?? item.uploadedAt;
+    const date = item.uploadedAt;
     const day = safeFormatDate(date, "yyyy-MM-dd");
     if (!day) continue;
     if (!map.has(day)) map.set(day, []);
@@ -116,7 +116,7 @@ export default function GalleryClient({
   const days = useMemo(() => {
     const set = new Set<string>();
     for (const item of filteredPosts) {
-      const date = item.takenAt ?? item.uploadedAt;
+      const date = item.uploadedAt;
       const day = safeFormatDate(date, "yyyy-MM-dd");
       if (day) set.add(day);
     }

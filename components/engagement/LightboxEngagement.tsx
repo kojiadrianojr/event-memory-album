@@ -32,7 +32,7 @@ function commentSummary(count: number): string {
 }
 
 function postDateLabel(post: PostItem): string {
-  const date = post.takenAt ?? post.uploadedAt;
+  const date = post.uploadedAt;
   if (!date) return "";
   return safeFormatDate(date, "MMM d, yyyy");
 }

@@ -9,6 +9,7 @@ import {
   type InviteRow,
 } from "@/components/ui/InviteListBuilder";
 import { generateEventCode } from "@/lib/event-code";
+import { clientAbsoluteSiteUrl } from "@/lib/site-url";
 import {
   createEventSchema,
   inviteCodeSchema,
@@ -170,10 +171,9 @@ export default function CreatePage() {
   }
 
   if (success) {
-    const origin = window.location.origin;
-    const guestUrl = `${origin}/event/${success.accessToken}`;
-    const viewUrl = `${origin}/view/${success.viewToken}`;
-    const adminUrl = `${origin}/admin/${success.adminToken}`;
+    const guestUrl = clientAbsoluteSiteUrl(`/event/${success.accessToken}`);
+    const viewUrl = clientAbsoluteSiteUrl(`/view/${success.viewToken}`);
+    const adminUrl = clientAbsoluteSiteUrl(`/admin/${success.adminToken}`);
 
     return (
       <main className="min-h-screen bg-zinc-50 flex items-start justify-center py-16 px-4">

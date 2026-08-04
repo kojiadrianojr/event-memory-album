@@ -95,7 +95,6 @@ const postMediaItemSchema = z
   .object({
     objectKey: z.string().min(1),
     type: z.enum(["PHOTO", "VIDEO"]),
-    takenAt: z.string().datetime().optional(),
     thumbnailObjectKey: z.string().min(1).optional(),
   })
   .superRefine((data, ctx) => {
@@ -144,7 +143,6 @@ export const recordMediaSchema = z
     caption: z.string().max(500).optional(),
     uploaderName: z.string().min(1).max(100),
     eventId: z.string().min(1),
-    takenAt: z.string().datetime().optional(),
     momentId: z.string().min(1).optional(),
     promptId: z.string().min(1).optional(),
     idempotencyKey: z.string().uuid().optional(),

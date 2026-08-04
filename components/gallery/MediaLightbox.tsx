@@ -95,7 +95,7 @@ export default function MediaLightbox({
     [post.media]
   );
 
-  const date = post.takenAt ?? post.uploadedAt;
+  const date = post.uploadedAt;
   const description = useMemo(
     () =>
       [post.caption, `${post.uploaderName} · ${formatDate(date)}`]

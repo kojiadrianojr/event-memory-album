@@ -4,7 +4,6 @@ import { invalidatePostCaches } from "@/lib/cache-invalidate";
 import { verifyAccessTokenForEvent } from "@/lib/event-auth";
 import { withIdempotency } from "@/lib/idempotency";
 import {
-  earliestTakenAt,
   mediaUrlForType,
   postInclude,
   thumbnailUrlForType,
@@ -89,15 +88,12 @@ export async function POST(request: Request) {
         }))
       );
 
-      const takenAt = earliestTakenAt(items.map((i) => i.takenAt));
-
       const [post] = await db.$transaction([
         db.post.create({
           data: {
             eventId,
             caption: caption?.trim() || null,
             uploaderName,
-            takenAt,
             momentId: momentId ?? null,
             promptId: promptId ?? null,
             media: { create: mediaData },

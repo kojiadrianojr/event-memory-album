@@ -72,6 +72,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_WEBSITE_URL: ${NEXT_PUBLIC_WEBSITE_URL:-}
     profiles: ["full"]
     env_file: *app_env_files
     depends_on:

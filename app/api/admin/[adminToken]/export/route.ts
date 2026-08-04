@@ -34,7 +34,7 @@ export async function GET(
 
   const posts = await db.post.findMany({
     where: { eventId: event.id },
-    orderBy: [{ takenAt: "asc" }, { uploadedAt: "asc" }],
+    orderBy: [{ uploadedAt: "asc" }],
     include: {
       media: { orderBy: { sortOrder: "asc" } },
       moment: { select: { name: true } },
