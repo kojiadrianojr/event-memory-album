@@ -10,6 +10,8 @@ import MediaLightbox from "@/components/gallery/MediaLightbox";
 import GalleryFilters, {
   GALLERY_DAY_SCROLL_MARGIN,
 } from "@/components/gallery/GalleryFilters";
+import PhotoChallengesBanner from "@/components/gallery/PhotoChallenges";
+import { useChallenges } from "@/components/gallery/ChallengesContext";
 import EventHeaderTitle from "@/components/event/EventHeaderTitle";
 import LightboxEngagement from "@/components/engagement/LightboxEngagement";
 import { useGuestName } from "@/lib/use-guest-name";
@@ -18,7 +20,6 @@ import {
   Reaction,
   Comment,
   EventMoment,
-  EventPrompt,
   isVisualPost,
 } from "@/components/gallery/types";
 
@@ -67,7 +68,6 @@ export default function GalleryClient({
 
   const [posts, setPosts] = useState<PostItem[]>([]);
   const [moments, setMoments] = useState<EventMoment[]>([]);
-  const [prompts, setPrompts] = useState<EventPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [lightboxPost, setLightboxPost] = useState<PostItem | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = useState(0);
@@ -75,20 +75,19 @@ export default function GalleryClient({
   const [selectedMomentId, setSelectedMomentId] = useState<string | null>(null);
   const [userSelectedDay, setUserSelectedDay] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const { setPromptCounts } = useChallenges();
 
   const fetchPosts = useCallback(async () => {
     try {
       const query = selectedMomentId
         ? `?momentId=${encodeURIComponent(selectedMomentId)}`
         : "";
-      const [postsRes, momentsRes, promptsRes] = await Promise.all([
+      const [postsRes, momentsRes] = await Promise.all([
         fetch(`/api/events/${token}/media${query}`),
         fetch(`/api/events/${token}/moments`),
-        fetch(`/api/events/${token}/prompts`),
       ]);
       if (postsRes.ok) setPosts(await postsRes.json());
       if (momentsRes.ok) setMoments(await momentsRes.json());
-      if (promptsRes.ok) setPrompts(await promptsRes.json());
     } finally {
       setLoading(false);
     }
@@ -142,6 +141,10 @@ export default function GalleryClient({
     }
     return counts;
   }, [posts]);
+
+  useEffect(() => {
+    setPromptCounts(promptCounts);
+  }, [promptCounts, setPromptCounts]);
 
   function updatePostReactions(postId: string, reactions: Reaction[]) {
     setPosts((prev) =>
@@ -293,36 +296,20 @@ export default function GalleryClient({
       )}
 
       <div className="mx-auto flex max-w-lg flex-col gap-6 px-4 pt-4">
-        <GalleryFilters
-          moments={moments}
-          selectedMomentId={selectedMomentId}
-          onSelectMoment={setSelectedMomentId}
-          uploaderFilter={uploaderFilter}
-          clearUploaderHref={readOnly ? `/view/${token}` : `/event/${token}`}
-          days={days}
-          selectedDay={selectedDay}
-          onSelectDay={scrollToDay}
-        />
-
-      {!readOnly && prompts.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-            Photo Challenges
-          </h2>
-          {prompts.map((prompt) => (
-            <a
-              key={prompt.id}
-              href={`/event/${token}/upload?promptId=${prompt.id}`}
-              className="rounded-xl border border-zinc-200 bg-white p-4 flex items-center justify-between gap-3 hover:border-zinc-300 transition-colors"
-            >
-              <p className="text-sm text-zinc-800">{prompt.text}</p>
-              <span className="shrink-0 text-xs font-medium text-zinc-500">
-                {promptCounts[prompt.id] ?? 0} posts
-              </span>
-            </a>
-          ))}
+          <GalleryFilters
+            moments={moments}
+            selectedMomentId={selectedMomentId}
+            onSelectMoment={setSelectedMomentId}
+            uploaderFilter={uploaderFilter}
+            clearUploaderHref={readOnly ? `/view/${token}` : `/event/${token}`}
+            days={days}
+            selectedDay={selectedDay}
+            onSelectDay={scrollToDay}
+          />
+
+          {!readOnly && <PhotoChallengesBanner />}
         </div>
-      )}
 
       {filteredPosts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
