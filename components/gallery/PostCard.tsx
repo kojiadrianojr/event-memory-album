@@ -15,6 +15,11 @@ import { CommentOptionsMenu } from "@/components/engagement/CommentPanel";
 import GuestAvatar from "@/components/ui/GuestAvatar";
 import MediaStackIndicator from "@/components/gallery/MediaStackIndicator";
 import {
+  aspectRatioStyleValue,
+  feedSinglePhotoClasses,
+  feedTwoPhotoLayout,
+} from "@/lib/media-aspect";
+import {
   PostItem,
   Reaction,
   Comment,
@@ -72,12 +77,14 @@ function MediaTile({
   onClick,
   overlay,
   className = "",
+  style,
 }: {
   asset: PostItem["media"][number];
   post: PostItem;
   onClick: () => void;
   overlay?: string;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   if (asset.type === "VIDEO" && asset.url) {
     return (
@@ -103,6 +110,7 @@ function MediaTile({
     <button
       type="button"
       onClick={onClick}
+      style={style}
       className={`relative block w-full overflow-hidden bg-zinc-100 focus:outline-none ${className}`}
       aria-label={post.caption ?? `Photo by ${post.uploaderName}`}
     >
@@ -152,17 +160,58 @@ function MediaGrid({
 
   if (count === 1) {
     const asset = visual[0];
+    const ratio = aspectRatioStyleValue(asset.width, asset.height);
     return (
       <MediaTile
         asset={asset}
         post={post}
         onClick={() => onImageClick(post.media.indexOf(asset))}
-        className="w-full"
+        className={feedSinglePhotoClasses(asset.width, asset.height)}
+        style={ratio ? { aspectRatio: ratio } : undefined}
       />
     );
   }
 
   if (count === 2) {
+    const layout = feedTwoPhotoLayout(visual[0], visual[1]);
+    if (layout === "landscape-stack") {
+      return (
+        <div className="relative grid grid-cols-1 gap-0.5">
+          {indicator}
+          {visual.map((asset) => (
+            <MediaTile
+              key={asset.id}
+              asset={asset}
+              post={post}
+              onClick={() => onImageClick(post.media.indexOf(asset))}
+              className="aspect-video"
+            />
+          ))}
+        </div>
+      );
+    }
+
+    if (layout === "portrait-row") {
+      return (
+        <div className="relative grid grid-cols-2 gap-0.5">
+          {indicator}
+          {visual.map((asset) => {
+            const ratio = aspectRatioStyleValue(asset.width, asset.height);
+            return (
+              <MediaTile
+                key={asset.id}
+                asset={asset}
+                post={post}
+                onClick={() => onImageClick(post.media.indexOf(asset))}
+                className={ratio ? "" : "aspect-[3/4]"}
+                style={ratio ? { aspectRatio: ratio } : undefined}
+              />
+            );
+          })}
+        </div>
+      );
+    }
+
     return (
       <div className="relative grid grid-cols-2 gap-0.5">
         {indicator}

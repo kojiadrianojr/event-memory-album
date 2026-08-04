@@ -6,6 +6,7 @@ import { safeFormatDate } from "@/lib/safe-date";
 import { safeDecodeURIComponent } from "@/lib/safe-decode";
 import GuestNamePrompt from "@/components/ui/GuestNamePrompt";
 import PostCard from "@/components/gallery/PostCard";
+import PhotoGrid from "@/components/gallery/PhotoGrid";
 import MediaLightbox from "@/components/gallery/MediaLightbox";
 import GalleryFilters, {
   GALLERY_DAY_SCROLL_MARGIN,
@@ -20,8 +21,14 @@ import {
   Reaction,
   Comment,
   EventMoment,
+  flattenVisualMedia,
   isVisualPost,
 } from "@/components/gallery/types";
+import {
+  getGalleryViewMode,
+  setGalleryViewMode,
+  type GalleryViewMode,
+} from "@/lib/gallery-view-storage";
 
 interface GalleryClientProps {
   token: string;
@@ -71,7 +78,11 @@ export default function GalleryClient({
   const [loading, setLoading] = useState(true);
   const [lightboxPost, setLightboxPost] = useState<PostItem | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = useState(0);
+  const [lightboxFlatIndex, setLightboxFlatIndex] = useState<number | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<GalleryViewMode>(() =>
+    getGalleryViewMode(eventId)
+  );
   const [selectedMomentId, setSelectedMomentId] = useState<string | null>(null);
   const [userSelectedDay, setUserSelectedDay] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -111,6 +122,16 @@ export default function GalleryClient({
     if (!uploaderFilter) return posts;
     return posts.filter((item) => item.uploaderName === uploaderFilter.name);
   }, [posts, uploaderFilter]);
+
+  function handleViewModeChange(mode: GalleryViewMode) {
+    setViewMode(mode);
+    setGalleryViewMode(eventId, mode);
+  }
+
+  const flatVisualItems = useMemo(
+    () => flattenVisualMedia(filteredPosts),
+    [filteredPosts]
+  );
 
   const days = useMemo(() => {
     const set = new Set<string>();
@@ -259,10 +280,21 @@ export default function GalleryClient({
     );
   }
 
-  function openLightbox(post: PostItem, mediaIndex: number) {
+  function openFeedLightbox(post: PostItem, mediaIndex: number) {
+    setLightboxFlatIndex(null);
     setLightboxPost(post);
     setLightboxMediaIndex(visualMediaIndex(post, mediaIndex));
     setLightboxOpen(true);
+  }
+
+  function openPhotosLightbox(index: number) {
+    setLightboxPost(null);
+    setLightboxFlatIndex(index);
+    setLightboxOpen(true);
+  }
+
+  function closeLightbox() {
+    setLightboxOpen(false);
   }
 
   function scrollToDay(day: string) {
@@ -283,6 +315,10 @@ export default function GalleryClient({
   }
 
   const groups = groupByDay(filteredPosts);
+  const containerWidthClass =
+    viewMode === "photos"
+      ? "max-w-lg sm:max-w-2xl md:max-w-4xl"
+      : "max-w-lg";
 
   return (
     <div>
@@ -295,7 +331,7 @@ export default function GalleryClient({
         </header>
       )}
 
-      <div className="mx-auto flex max-w-lg flex-col gap-6 px-4 pt-4">
+      <div className={`mx-auto flex ${containerWidthClass} flex-col gap-6 px-4 pt-4`}>
         <div className="flex flex-col gap-3">
           <GalleryFilters
             moments={moments}
@@ -306,12 +342,33 @@ export default function GalleryClient({
             days={days}
             selectedDay={selectedDay}
             onSelectDay={scrollToDay}
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
           />
 
           {!readOnly && <PhotoChallengesBanner />}
         </div>
 
-      {filteredPosts.length === 0 ? (
+      {viewMode === "photos" ? (
+        flatVisualItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
+            <p className="text-sm">
+              {uploaderFilter
+                ? `No photos from ${uploaderFilter.name} yet.`
+                : readOnly
+                  ? "No photos shared yet."
+                  : "No photos yet. Be the first to upload!"}
+            </p>
+          </div>
+        ) : (
+          <div className="pb-6">
+            <PhotoGrid
+              items={flatVisualItems}
+              onItemClick={openPhotosLightbox}
+            />
+          </div>
+        )
+      ) : filteredPosts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
           <p className="text-sm">
             {uploaderFilter
@@ -347,7 +404,7 @@ export default function GalleryClient({
                   readOnly={readOnly}
                   moments={moments}
                   onImageClick={(mediaIndex) => {
-                    if (isVisualPost(post)) openLightbox(post, mediaIndex);
+                    if (isVisualPost(post)) openFeedLightbox(post, mediaIndex);
                   }}
                   onReactionsChange={(reactions) =>
                     updatePostReactions(post.id, reactions)
@@ -373,7 +430,41 @@ export default function GalleryClient({
           post={lightboxPost}
           mediaIndex={lightboxMediaIndex}
           open={lightboxOpen}
-          onClose={() => setLightboxOpen(false)}
+          onClose={closeLightbox}
+          renderFooter={
+            readOnly || guestName
+              ? (post, { isMobile }) => (
+                  <LightboxEngagement
+                    post={post}
+                    token={token}
+                    guestName={guestName ?? ""}
+                    readOnly={readOnly}
+                    isMobile={isMobile}
+                    onReactionsChange={(reactions) =>
+                      updatePostReactions(post.id, reactions)
+                    }
+                    onCommentAdded={(comment) =>
+                      addPostComment(post.id, comment)
+                    }
+                    onCommentUpdated={(comment) =>
+                      updateComment(post.id, comment)
+                    }
+                    onCommentDeleted={(commentId) =>
+                      removeComment(post.id, commentId)
+                    }
+                  />
+                )
+              : undefined
+          }
+        />
+      )}
+
+      {lightboxFlatIndex !== null && flatVisualItems.length > 0 && (
+        <MediaLightbox
+          flatItems={flatVisualItems}
+          startIndex={lightboxFlatIndex}
+          open={lightboxOpen}
+          onClose={closeLightbox}
           renderFooter={
             readOnly || guestName
               ? (post, { isMobile }) => (

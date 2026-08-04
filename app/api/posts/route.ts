@@ -5,8 +5,8 @@ import { verifyAccessTokenForEvent } from "@/lib/event-auth";
 import { withIdempotency } from "@/lib/idempotency";
 import {
   mediaUrlForType,
+  photoMetadataForType,
   postInclude,
-  thumbnailUrlForType,
 } from "@/lib/post-helpers";
 import { RATE_LIMITS, enforceRateLimit } from "@/lib/rate-limit";
 import { createPostSchema } from "@/lib/validations";
@@ -77,15 +77,24 @@ export async function POST(request: Request) {
       }
 
       const mediaData = await Promise.all(
-        items.map(async (item, index) => ({
-          eventId,
-          type: item.type,
-          url: mediaUrlForType(item.type, item.objectKey),
-          thumbnailUrl: item.thumbnailObjectKey
-            ? mediaUrlForType("PHOTO", item.thumbnailObjectKey)
-            : await thumbnailUrlForType(item.type, item.objectKey),
-          sortOrder: index,
-        }))
+        items.map(async (item, index) => {
+          const photoMeta =
+            item.type === "PHOTO" && !item.thumbnailObjectKey
+              ? await photoMetadataForType(item.type, item.objectKey)
+              : null;
+
+          return {
+            eventId,
+            type: item.type,
+            url: mediaUrlForType(item.type, item.objectKey),
+            thumbnailUrl: item.thumbnailObjectKey
+              ? mediaUrlForType("PHOTO", item.thumbnailObjectKey)
+              : photoMeta?.thumbnailUrl ?? null,
+            width: photoMeta?.width ?? null,
+            height: photoMeta?.height ?? null,
+            sortOrder: index,
+          };
+        })
       );
 
       const [post] = await db.$transaction([

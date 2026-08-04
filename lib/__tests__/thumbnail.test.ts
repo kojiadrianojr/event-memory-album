@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { createThumbnail, thumbnailObjectKey } from "@/lib/thumbnail";
+import { createThumbnail, getImageDimensions, thumbnailObjectKey } from "@/lib/thumbnail";
 
 describe("thumbnailObjectKey", () => {
   it("nests a thumbs/ folder next to the original and forces .webp", () => {
@@ -49,5 +49,18 @@ describe("createThumbnail", () => {
     const output = await createThumbnail(input);
     const info = await sharp(output).metadata();
     expect(info.width).toBe(200);
+  });
+});
+
+describe("getImageDimensions", () => {
+  it("returns oriented dimensions", async () => {
+    const input = await sharp({
+      create: { width: 1200, height: 800, channels: 3, background: { r: 0, g: 0, b: 0 } },
+    })
+      .png()
+      .toBuffer();
+
+    const dims = await getImageDimensions(input);
+    expect(dims).toEqual({ width: 1200, height: 800 });
   });
 });

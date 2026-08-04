@@ -1,8 +1,10 @@
 "use client";
 
 import CalendarNav from "@/components/gallery/CalendarNav";
+import GalleryViewToggle from "@/components/gallery/GalleryViewToggle";
 import UploaderFilterBar from "@/components/gallery/UploaderFilterBar";
 import { EventMoment } from "@/components/gallery/types";
+import type { GalleryViewMode } from "@/lib/gallery-view-storage";
 
 interface GalleryFiltersProps {
   moments: EventMoment[];
@@ -13,6 +15,8 @@ interface GalleryFiltersProps {
   days: string[];
   selectedDay: string | null;
   onSelectDay: (day: string) => void;
+  viewMode: GalleryViewMode;
+  onViewModeChange: (mode: GalleryViewMode) => void;
 }
 
 function MomentTabs({
@@ -89,16 +93,20 @@ export default function GalleryFilters({
   days,
   selectedDay,
   onSelectDay,
+  viewMode,
+  onViewModeChange,
 }: GalleryFiltersProps) {
   const showMoments = moments.length > 0;
   const showDays = days.length > 1;
 
-  if (!uploaderFilter && !showMoments && !showDays) {
-    return null;
-  }
-
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <GalleryViewToggle mode={viewMode} onChange={onViewModeChange} />
+        </div>
+      </div>
+
       {uploaderFilter && (
         <UploaderFilterBar
           name={uploaderFilter.name}

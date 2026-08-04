@@ -180,3 +180,17 @@ body {
   pointer-events: auto;
   touch-action: manipulation;
 }
+
+.media-lightbox-fit-contain .yarl__slide_image {
+  object-fit: contain;
+}
+
+.media-lightbox-fit-cover .yarl__slide_image {
+  object-fit: cover;
+}
+
+.media-lightbox .yarl__counter {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  font-weight: 500;
+}

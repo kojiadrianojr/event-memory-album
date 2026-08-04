@@ -115,6 +115,8 @@ model Media {
   postId       String
   url          String?
   thumbnailUrl String?
+  width        Int?
+  height       Int?
   type         MediaType
   sortOrder    Int       @default(0)
 

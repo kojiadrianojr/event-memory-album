@@ -5,8 +5,8 @@ import { verifyAccessTokenForEvent } from "@/lib/event-auth";
 import { withIdempotency } from "@/lib/idempotency";
 import {
   mediaUrlForType,
+  photoMetadataForType,
   postInclude,
-  thumbnailUrlForType,
 } from "@/lib/post-helpers";
 import { RATE_LIMITS, enforceRateLimit } from "@/lib/rate-limit";
 import { recordMediaSchema } from "@/lib/validations";
@@ -75,7 +75,8 @@ export async function POST(request: Request) {
       }
 
       const url = mediaUrlForType(type, objectKey);
-      const thumbnailUrl = await thumbnailUrlForType(type, objectKey);
+      const photoMeta =
+        type === "PHOTO" ? await photoMetadataForType(type, objectKey) : null;
 
       const [post] = await db.$transaction([
         db.post.create({
@@ -89,7 +90,9 @@ export async function POST(request: Request) {
               create: {
                 eventId,
                 url,
-                thumbnailUrl,
+                thumbnailUrl: photoMeta?.thumbnailUrl ?? null,
+                width: photoMeta?.width ?? null,
+                height: photoMeta?.height ?? null,
                 type,
                 sortOrder: 0,
               },

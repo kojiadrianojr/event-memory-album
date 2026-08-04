@@ -31,8 +31,16 @@ export interface MediaAsset {
   id: string;
   url: string | null;
   thumbnailUrl: string | null;
+  width?: number | null;
+  height?: number | null;
   type: "PHOTO" | "VIDEO" | "TEXT" | "AUDIO";
   sortOrder: number;
+}
+
+export interface FlatMediaItem {
+  post: PostItem;
+  media: MediaAsset;
+  mediaIndex: number;
 }
 
 export interface PostItem {
@@ -78,4 +86,16 @@ export function isVideoPost(post: PostItem): boolean {
 export function isVisualPost(post: PostItem): boolean {
   const type = postDisplayType(post);
   return type === "PHOTO" || type === "VIDEO";
+}
+
+export function flattenVisualMedia(posts: PostItem[]): FlatMediaItem[] {
+  const items: FlatMediaItem[] = [];
+  for (const post of posts) {
+    post.media.forEach((media, mediaIndex) => {
+      if ((media.type === "PHOTO" || media.type === "VIDEO") && media.url) {
+        items.push({ post, media, mediaIndex });
+      }
+    });
+  }
+  return items;
 }

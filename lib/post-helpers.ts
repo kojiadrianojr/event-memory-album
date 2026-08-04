@@ -2,7 +2,11 @@ import type { Media, Post } from "@prisma/client";
 import { db } from "@/lib/db";
 import { invalidatePostCaches } from "@/lib/cache-invalidate";
 import { deleteObject, getObjectBuffer, getPublicUrl, objectKeyFromPublicUrl, putObject } from "@/lib/s3";
-import { createThumbnail, thumbnailObjectKey } from "@/lib/thumbnail";
+import {
+  createThumbnail,
+  getImageDimensions,
+  thumbnailObjectKey,
+} from "@/lib/thumbnail";
 
 export async function deletePostAndStorage(
   post: Post & { media: Media[] }
@@ -21,22 +25,46 @@ export async function deletePostAndStorage(
   }
 }
 
+export interface PhotoMetadata {
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
+}
+
 /**
- * Best-effort thumbnail generation for photo uploads. Never throws — a failed
- * thumbnail just means the full-size image is served everywhere.
+ * Best-effort thumbnail + dimension extraction for photo uploads. Never throws —
+ * a failed thumbnail just means the full-size image is served everywhere.
  */
-export async function tryCreateThumbnailUrl(
-  objectKey: string
-): Promise<string | null> {
+export async function photoMetadataForType(
+  type: "PHOTO" | "VIDEO" | "TEXT" | "AUDIO",
+  objectKey?: string | null
+): Promise<PhotoMetadata> {
+  if (type !== "PHOTO" || !objectKey) {
+    return { thumbnailUrl: null, width: null, height: null };
+  }
+
   try {
     const original = await getObjectBuffer(objectKey);
+    const dimensions = await getImageDimensions(original);
     const thumbnail = await createThumbnail(original);
     const thumbKey = thumbnailObjectKey(objectKey);
     await putObject(thumbKey, thumbnail, "image/webp");
-    return getPublicUrl(thumbKey);
+    return {
+      thumbnailUrl: getPublicUrl(thumbKey),
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
+    };
   } catch {
-    return null;
+    return { thumbnailUrl: null, width: null, height: null };
   }
+}
+
+/** @deprecated Use photoMetadataForType */
+export async function tryCreateThumbnailUrl(
+  objectKey: string
+): Promise<string | null> {
+  const meta = await photoMetadataForType("PHOTO", objectKey);
+  return meta.thumbnailUrl;
 }
 
 export const postInclude = {
@@ -61,6 +89,6 @@ export async function thumbnailUrlForType(
   type: "PHOTO" | "VIDEO" | "TEXT" | "AUDIO",
   objectKey?: string | null
 ): Promise<string | null> {
-  if (type !== "PHOTO" || !objectKey) return null;
-  return tryCreateThumbnailUrl(objectKey);
+  const meta = await photoMetadataForType(type, objectKey);
+  return meta.thumbnailUrl;
 }

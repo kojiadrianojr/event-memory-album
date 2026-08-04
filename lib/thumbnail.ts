@@ -3,6 +3,31 @@ import sharp from "sharp";
 const THUMBNAIL_WIDTH = 480;
 const THUMBNAIL_QUALITY = 70;
 
+export interface ImageDimensions {
+  width: number;
+  height: number;
+}
+
+/** Reads width/height after EXIF auto-orientation. */
+export async function getImageDimensions(
+  input: Buffer
+): Promise<ImageDimensions | null> {
+  try {
+    const meta = await sharp(input).rotate().metadata();
+    if (
+      typeof meta.width !== "number" ||
+      typeof meta.height !== "number" ||
+      meta.width <= 0 ||
+      meta.height <= 0
+    ) {
+      return null;
+    }
+    return { width: meta.width, height: meta.height };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Resizes an image buffer down to a mobile-friendly webp thumbnail.
  * Never upscales — images already narrower than THUMBNAIL_WIDTH are only re-encoded.
