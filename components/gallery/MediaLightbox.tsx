@@ -71,11 +71,13 @@ function formatDate(dateStr: string | null): string {
   return format(parseISO(dateStr), "MMM d, yyyy");
 }
 
+type VideoSlide = Slide & VideoSlideMeta;
+
 function buildSlide(
   item: MediaAsset,
   post: PostItem,
   description: string
-): Slide {
+): Slide | VideoSlide {
   if (item.type === "VIDEO") {
     const poster = mediaPosterUrl(item);
     return {
@@ -86,7 +88,7 @@ function buildSlide(
       mimeType: mimeFromUrl(item.url!, "video", "video/mp4"),
       title: post.caption ?? undefined,
       description,
-    };
+    } satisfies VideoSlide;
   }
 
   return {

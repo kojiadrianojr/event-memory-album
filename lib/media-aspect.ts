@@ -65,8 +65,8 @@ export function feedSinglePhotoClasses(
 
 /** Feed layout for two-photo posts when dimensions are known. */
 export function feedTwoPhotoLayout(
-  a: { width: number | null; height: number | null },
-  b: { width: number | null; height: number | null }
+  a: { width?: number | null; height?: number | null },
+  b: { width?: number | null; height?: number | null }
 ): "portrait-row" | "landscape-stack" | "square-grid" {
   const oa = getMediaOrientation(a.width, a.height);
   const ob = getMediaOrientation(b.width, b.height);

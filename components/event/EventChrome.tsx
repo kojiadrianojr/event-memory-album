@@ -140,38 +140,37 @@ function EventChromeInner({
   const guestName = useGuestName(eventId);
 
   return (
-    <ChallengesProvider token={token} eventId={eventId}>
-      <div className="min-h-screen bg-zinc-50 flex flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-zinc-200 bg-white/90 px-4 py-2.5 backdrop-blur-sm">
-          <EventHeaderTitle eventName={eventName} />
-          {guestName && (
-            <div className="flex shrink-0 items-center gap-2">
-              <ChallengeHeaderButton />
-              <Link
-                href={
-                  onGallery
-                    ? showMine
-                      ? `/event/${token}`
-                      : `/event/${token}?mine=1`
-                    : `/event/${token}/wall`
-                }
-                className={`flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2 transition-colors hover:bg-zinc-100 ${
-                  showMine && onGallery ? "ring-2 ring-zinc-900 ring-offset-1" : ""
-                }`}
-                title={
-                  onGallery
-                    ? showMine
-                      ? "Showing your photos — tap to show all"
-                      : `View your photos (${guestName})`
-                    : guestName
-                }
-                aria-current={showMine && onGallery ? "true" : undefined}
-              >
-                <GuestAvatar name={guestName} size="sm" />
-                <span className="hidden max-w-[7rem] truncate text-xs font-medium text-zinc-600 sm:block">
-                  {onGallery && showMine ? "My photos" : guestName}
-                </span>
-              </Link>
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-zinc-200 bg-white/90 px-4 py-2.5 backdrop-blur-sm">
+        <EventHeaderTitle eventName={eventName} />
+        {guestName && (
+          <div className="flex shrink-0 items-center gap-2">
+            <ChallengeHeaderButton />
+            <Link
+              href={
+                onGallery
+                  ? showMine
+                    ? `/event/${token}`
+                    : `/event/${token}?mine=1`
+                  : `/event/${token}/wall`
+              }
+              className={`flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2 transition-colors hover:bg-zinc-100 ${
+                showMine && onGallery ? "ring-2 ring-zinc-900 ring-offset-1" : ""
+              }`}
+              title={
+                onGallery
+                  ? showMine
+                    ? "Showing your photos — tap to show all"
+                    : `View your photos (${guestName})`
+                  : guestName
+              }
+              aria-current={showMine && onGallery ? "true" : undefined}
+            >
+              <GuestAvatar name={guestName} size="sm" />
+              <span className="hidden max-w-[7rem] truncate text-xs font-medium text-zinc-600 sm:block">
+                {onGallery && showMine ? "My photos" : guestName}
+              </span>
+            </Link>
             <SwitchGuestButton eventId={eventId} />
           </div>
         )}
@@ -222,26 +221,29 @@ function EventChromeInner({
           })}
         </div>
       </nav>
-      </div>
-    </ChallengesProvider>
+    </div>
   );
 }
 
 export default function EventChrome(props: EventChromeProps) {
+  // ChallengesProvider must wrap Suspense: the fallback also renders
+  // children (GalleryClient), which calls useChallenges().
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-zinc-50 flex flex-col">
-          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-zinc-200 bg-white/90 px-4 py-2.5 backdrop-blur-sm">
-            <EventHeaderTitle eventName={props.eventName} />
-          </header>
-          <div className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
-            {props.children}
+    <ChallengesProvider token={props.token} eventId={props.eventId}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-zinc-50 flex flex-col">
+            <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-zinc-200 bg-white/90 px-4 py-2.5 backdrop-blur-sm">
+              <EventHeaderTitle eventName={props.eventName} />
+            </header>
+            <div className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+              {props.children}
+            </div>
           </div>
-        </div>
-      }
-    >
-      <EventChromeInner {...props} />
-    </Suspense>
+        }
+      >
+        <EventChromeInner {...props} />
+      </Suspense>
+    </ChallengesProvider>
   );
 }

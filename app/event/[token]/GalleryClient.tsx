@@ -29,6 +29,13 @@ import {
   setGalleryViewMode,
   type GalleryViewMode,
 } from "@/lib/gallery-view-storage";
+import { mergeFeedPosts } from "@/lib/merge-feed-posts";
+import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
+import PullToRefreshIndicator from "@/components/gallery/PullToRefreshIndicator";
+import NewPostsBanner from "@/components/gallery/NewPostsBanner";
+
+const GALLERY_POLL_INTERVAL_MS = 30_000;
+const SCROLL_TOP_THRESHOLD_PX = 80;
 
 interface GalleryClientProps {
   token: string;
@@ -60,6 +67,15 @@ function visualMediaIndex(post: PostItem, mediaIndex: number): number {
   return idx >= 0 ? idx : 0;
 }
 
+/** Syncs feed prompt tallies into ChallengesProvider (guest gallery only). */
+function PromptCountsSync({ counts }: { counts: Record<string, number> }) {
+  const { setPromptCounts } = useChallenges();
+  useEffect(() => {
+    setPromptCounts(counts);
+  }, [counts, setPromptCounts]);
+  return null;
+}
+
 export default function GalleryClient({
   token,
   eventId,
@@ -76,6 +92,7 @@ export default function GalleryClient({
   const [posts, setPosts] = useState<PostItem[]>([]);
   const [moments, setMoments] = useState<EventMoment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingNewPosts, setPendingNewPosts] = useState<PostItem[]>([]);
   const [lightboxPost, setLightboxPost] = useState<PostItem | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = useState(0);
   const [lightboxFlatIndex, setLightboxFlatIndex] = useState<number | null>(null);
@@ -86,27 +103,91 @@ export default function GalleryClient({
   const [selectedMomentId, setSelectedMomentId] = useState<string | null>(null);
   const [userSelectedDay, setUserSelectedDay] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const { setPromptCounts } = useChallenges();
+  const postsRef = useRef<PostItem[]>([]);
 
-  const fetchPosts = useCallback(async () => {
+  useEffect(() => {
+    postsRef.current = posts;
+  }, [posts]);
+
+  const momentQuery = selectedMomentId
+    ? `?momentId=${encodeURIComponent(selectedMomentId)}`
+    : "";
+
+  const refreshFeed = useCallback(async () => {
     try {
-      const query = selectedMomentId
-        ? `?momentId=${encodeURIComponent(selectedMomentId)}`
-        : "";
       const [postsRes, momentsRes] = await Promise.all([
-        fetch(`/api/events/${token}/media${query}`),
+        fetch(`/api/events/${token}/media${momentQuery}`),
         fetch(`/api/events/${token}/moments`),
       ]);
       if (postsRes.ok) setPosts(await postsRes.json());
       if (momentsRes.ok) setMoments(await momentsRes.json());
+      setPendingNewPosts([]);
     } finally {
       setLoading(false);
     }
-  }, [token, selectedMomentId]);
+  }, [token, momentQuery]);
+
+  const pollNewPosts = useCallback(async () => {
+    const currentPosts = postsRef.current;
+
+    if (currentPosts.length === 0) {
+      await refreshFeed();
+      return;
+    }
+
+    try {
+      const separator = momentQuery ? "&" : "?";
+      const res = await fetch(
+        `/api/events/${token}/media${momentQuery}${separator}limit=50`
+      );
+      if (!res.ok) return;
+
+      const data = (await res.json()) as { items?: PostItem[] };
+      const items = data.items ?? [];
+      if (items.length === 0) return;
+
+      if (window.scrollY <= SCROLL_TOP_THRESHOLD_PX) {
+        setPosts((prev) => mergeFeedPosts(prev, items).merged);
+      } else {
+        setPendingNewPosts((prev) => mergeFeedPosts(prev, items).merged);
+      }
+    } catch {
+      // best-effort
+    }
+  }, [token, momentQuery, refreshFeed]);
 
   useEffect(() => {
-    if (readOnly || guestName) fetchPosts();
-  }, [readOnly, guestName, fetchPosts]);
+    if (readOnly || guestName) refreshFeed();
+  }, [readOnly, guestName, refreshFeed]);
+
+  useEffect(() => {
+    if (!(readOnly || guestName) || lightboxOpen) return;
+
+    const timer = setInterval(() => {
+      void pollNewPosts();
+    }, GALLERY_POLL_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [readOnly, guestName, lightboxOpen, pollNewPosts]);
+
+  useEffect(() => {
+    if (!(readOnly || guestName)) return;
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void pollNewPosts();
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [readOnly, guestName, pollNewPosts]);
+
+  const { pullDistance, isRefreshing, pullThreshold } = usePullToRefresh({
+    onRefresh: refreshFeed,
+    enabled: !lightboxOpen && !loading,
+  });
 
   const uploaderFilter = useMemo(() => {
     if (showMine && guestName) return { name: guestName, label: "My uploads" };
@@ -122,6 +203,19 @@ export default function GalleryClient({
     if (!uploaderFilter) return posts;
     return posts.filter((item) => item.uploaderName === uploaderFilter.name);
   }, [posts, uploaderFilter]);
+
+  const pendingNewCount = useMemo(() => {
+    if (!uploaderFilter) return pendingNewPosts.length;
+    return pendingNewPosts.filter(
+      (item) => item.uploaderName === uploaderFilter.name
+    ).length;
+  }, [pendingNewPosts, uploaderFilter]);
+
+  function loadPendingPosts() {
+    setPosts((prev) => mergeFeedPosts(prev, pendingNewPosts).merged);
+    setPendingNewPosts([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   function handleViewModeChange(mode: GalleryViewMode) {
     setViewMode(mode);
@@ -162,10 +256,6 @@ export default function GalleryClient({
     }
     return counts;
   }, [posts]);
-
-  useEffect(() => {
-    setPromptCounts(promptCounts);
-  }, [promptCounts, setPromptCounts]);
 
   function updatePostReactions(postId: string, reactions: Reaction[]) {
     setPosts((prev) =>
@@ -320,8 +410,25 @@ export default function GalleryClient({
       ? "max-w-lg sm:max-w-2xl md:max-w-4xl"
       : "max-w-lg";
 
+  const hasStickyHeader = true;
+
   return (
     <div>
+      <PullToRefreshIndicator
+        pullDistance={pullDistance}
+        pullThreshold={pullThreshold}
+        isRefreshing={isRefreshing}
+        hasStickyHeader={hasStickyHeader}
+      />
+
+      {!lightboxOpen && pendingNewCount > 0 && (
+        <NewPostsBanner
+          count={pendingNewCount}
+          onLoad={loadPendingPosts}
+          hasStickyHeader={hasStickyHeader}
+        />
+      )}
+
       {readOnly && (
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-zinc-200 bg-white/90 px-4 py-2.5 backdrop-blur-sm">
           <EventHeaderTitle eventName={eventName} />
@@ -346,7 +453,12 @@ export default function GalleryClient({
             onViewModeChange={handleViewModeChange}
           />
 
-          {!readOnly && <PhotoChallengesBanner />}
+          {!readOnly && (
+            <>
+              <PromptCountsSync counts={promptCounts} />
+              <PhotoChallengesBanner />
+            </>
+          )}
         </div>
 
       {viewMode === "grid" ? (
