@@ -31,6 +31,7 @@ export interface MediaAsset {
   id: string;
   url: string | null;
   thumbnailUrl: string | null;
+  largeUrl?: string | null;
   width?: number | null;
   height?: number | null;
   type: "PHOTO" | "VIDEO" | "TEXT" | "AUDIO";

@@ -90,6 +90,7 @@ export async function POST(request: Request) {
             thumbnailUrl: item.thumbnailObjectKey
               ? mediaUrlForType("PHOTO", item.thumbnailObjectKey)
               : photoMeta?.thumbnailUrl ?? null,
+            largeUrl: photoMeta?.largeUrl ?? null,
             width: photoMeta?.width ?? null,
             height: photoMeta?.height ?? null,
             sortOrder: index,

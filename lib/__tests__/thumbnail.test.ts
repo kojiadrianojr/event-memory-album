@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { createThumbnail, getImageDimensions, thumbnailObjectKey } from "@/lib/thumbnail";
+import { createLargeVariant, createThumbnail, getImageDimensions, largeObjectKey, thumbnailObjectKey } from "@/lib/thumbnail";
 
 describe("thumbnailObjectKey", () => {
   it("nests a thumbs/ folder next to the original and forces .webp", () => {
@@ -16,6 +16,14 @@ describe("thumbnailObjectKey", () => {
   it("strips only the final extension", () => {
     expect(thumbnailObjectKey("events/e1/my.photo.name.jpeg")).toBe(
       "events/e1/thumbs/my.photo.name.webp"
+    );
+  });
+});
+
+describe("largeObjectKey", () => {
+  it("nests a large/ folder next to the original and forces .webp", () => {
+    expect(largeObjectKey("events/abc123/photo.jpg")).toBe(
+      "events/abc123/large/photo.webp"
     );
   });
 });
@@ -49,6 +57,23 @@ describe("createThumbnail", () => {
     const output = await createThumbnail(input);
     const info = await sharp(output).metadata();
     expect(info.width).toBe(200);
+  });
+});
+
+describe("createLargeVariant", () => {
+  async function testImageBuffer(width: number, height: number): Promise<Buffer> {
+    return sharp({
+      create: { width, height, channels: 3, background: { r: 200, g: 100, b: 50 } },
+    })
+      .png()
+      .toBuffer();
+  }
+
+  it("downscales a wide image to the large target width", async () => {
+    const input = await testImageBuffer(2400, 1200);
+    const output = await createLargeVariant(input);
+    const info = await sharp(output).metadata();
+    expect(info.width).toBe(1600);
   });
 });
 

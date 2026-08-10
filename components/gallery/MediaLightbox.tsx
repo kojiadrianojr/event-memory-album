@@ -16,7 +16,7 @@ import "yet-another-react-lightbox/plugins/counter.css";
 import VideoPlayer from "@/components/media/VideoPlayer";
 import { mimeFromUrl } from "@/lib/mime-from-url";
 import {
-  mediaFileUrl,
+  mediaLightboxUrl,
   mediaPlaybackUrl,
   mediaPosterUrl,
 } from "@/lib/media-url";
@@ -31,8 +31,19 @@ interface VideoSlideMeta {
   mimeType: string;
 }
 
+interface PhotoSlideMeta {
+  isPhotoSlide: true;
+  fullSrc: string;
+  placeholderSrc?: string;
+  alt: string;
+}
+
 function isVideoSlide(slide: Slide): slide is Slide & VideoSlideMeta {
   return (slide as Slide & VideoSlideMeta).isVideoSlide === true;
+}
+
+function isPhotoSlideType(slide: Slide): slide is Slide & PhotoSlideMeta {
+  return (slide as Slide & PhotoSlideMeta).isPhotoSlide === true;
 }
 
 export interface MediaLightboxFooterContext {
@@ -72,12 +83,53 @@ function formatDate(dateStr: string | null): string {
 }
 
 type VideoSlide = Slide & VideoSlideMeta;
+type PhotoSlide = Slide & PhotoSlideMeta;
+
+function PhotoSlideView({
+  fullSrc,
+  placeholderSrc,
+  alt,
+  fit,
+}: {
+  fullSrc: string;
+  placeholderSrc?: string;
+  alt: string;
+  fit: PhotoFitMode;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const fitClass =
+    fit === "cover" ? "object-cover" : "object-contain";
+
+  return (
+    <div className="relative flex h-full w-full min-h-0 items-center justify-center">
+      {placeholderSrc && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={placeholderSrc}
+          alt=""
+          aria-hidden="true"
+          className={`absolute inset-0 h-full w-full scale-105 blur-sm ${fitClass}`}
+        />
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        key={fullSrc}
+        src={fullSrc}
+        alt={alt}
+        onLoad={() => setLoaded(true)}
+        className={`relative max-h-full max-w-full transition-opacity duration-300 ${fitClass} ${
+          loaded ? "opacity-100" : "opacity-0"
+        }`}
+      />
+    </div>
+  );
+}
 
 function buildSlide(
   item: MediaAsset,
   post: PostItem,
   description: string
-): Slide | VideoSlide {
+): Slide | VideoSlide | PhotoSlide {
   if (item.type === "VIDEO") {
     const poster = mediaPosterUrl(item);
     return {
@@ -91,12 +143,19 @@ function buildSlide(
     } satisfies VideoSlide;
   }
 
+  const placeholderSrc = mediaPosterUrl(item);
+  const fullSrc = mediaLightboxUrl(item);
+  const alt = post.caption ?? `Photo by ${post.uploaderName}`;
+
   return {
-    src: mediaFileUrl(item.id),
-    alt: post.caption ?? `Photo by ${post.uploaderName}`,
+    src: placeholderSrc ?? fullSrc,
+    isPhotoSlide: true as const,
+    fullSrc,
+    placeholderSrc,
+    alt,
     title: post.caption ?? undefined,
     description,
-  };
+  } satisfies PhotoSlide;
 }
 
 function FiniteNavVisibility() {
@@ -219,7 +278,7 @@ export default function MediaLightbox(props: MediaLightboxProps) {
   const activePost =
     slideEntries[resolvedIndex]?.post ?? slideEntries[startIndex]?.post;
   const currentSlide = slides[resolvedIndex];
-  const isPhotoSlide = currentSlide && !isVideoSlide(currentSlide);
+  const isPhotoSlide = currentSlide && isPhotoSlideType(currentSlide);
 
   const hasMultipleSlides = slides.length > 1;
   const hasMobileDock = !isDesktop && !!renderFooter;
@@ -303,7 +362,7 @@ export default function MediaLightbox(props: MediaLightboxProps) {
       }}
       render={{
         slideContainer: ({ slide, children }) =>
-          isVideoSlide(slide) ? (
+          isVideoSlide(slide) || isPhotoSlideType(slide) ? (
             <div className="yarl__slide_wrapper yarl__slide_wrapper_interactive yarl__fullsize yarl__flex_center">
               {children}
             </div>
@@ -323,6 +382,17 @@ export default function MediaLightbox(props: MediaLightboxProps) {
                   className="h-full w-full min-h-0 max-h-full max-w-full"
                 />
               </div>
+            );
+          }
+          if (isPhotoSlideType(slide)) {
+            return (
+              <PhotoSlideView
+                key={slide.fullSrc}
+                fullSrc={slide.fullSrc}
+                placeholderSrc={slide.placeholderSrc}
+                alt={slide.alt}
+                fit={photoFit}
+              />
             );
           }
           return undefined;

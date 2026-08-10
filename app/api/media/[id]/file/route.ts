@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { parseRangeHeader } from "@/lib/media-range";
+import {
+  ensureLargeVariant,
+  getMediaForFileRoute,
+  resolveMediaSourceUrl,
+  type MediaFileVariant,
+} from "@/lib/media-file-cache";
 import { mimeFromUrl } from "@/lib/mime-from-url";
 import { getObject, objectKeyFromPublicUrl } from "@/lib/s3";
 
@@ -14,6 +19,12 @@ function contentTypeForMedia(
   return mimeFromUrl(url, "image", "image/jpeg");
 }
 
+function parseVariantParam(raw: string | null): MediaFileVariant {
+  if (raw === "thumb") return "thumb";
+  if (raw === "large") return "large";
+  return "original";
+}
+
 // Intentionally unauthenticated: `id` is an unguessable cuid, and the storage
 // bucket behind it is already public (`mc anonymous set public` in
 // docker-compose.yml / equivalent public R2 config in prod) so the underlying
@@ -25,16 +36,25 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const wantsThumb = new URL(request.url).searchParams.get("variant") === "thumb";
+  const variant = parseVariantParam(
+    new URL(request.url).searchParams.get("variant")
+  );
 
-  const media = await db.media.findUnique({ where: { id } });
+  let media = await getMediaForFileRoute(id);
   if (!media?.url) {
     return NextResponse.json({ error: "Media not found" }, { status: 404 });
   }
 
-  // Fall back to the full-size image when no thumbnail was generated
-  // (videos/audio, text, or photos uploaded before thumbnails existed).
-  const sourceUrl = wantsThumb && media.thumbnailUrl ? media.thumbnailUrl : media.url;
+  if (variant === "large" && media.type === "PHOTO" && !media.largeUrl) {
+    media = await ensureLargeVariant(media);
+  }
+
+  // Fall back to the full-size image when no thumbnail/large variant exists
+  // (videos/audio, text, or photos uploaded before variants existed).
+  const sourceUrl = resolveMediaSourceUrl(media, variant);
+  if (!sourceUrl) {
+    return NextResponse.json({ error: "Media not found" }, { status: 404 });
+  }
 
   const objectKey = objectKeyFromPublicUrl(sourceUrl);
   if (!objectKey) {

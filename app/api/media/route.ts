@@ -91,6 +91,7 @@ export async function POST(request: Request) {
                 eventId,
                 url,
                 thumbnailUrl: photoMeta?.thumbnailUrl ?? null,
+                largeUrl: photoMeta?.largeUrl ?? null,
                 width: photoMeta?.width ?? null,
                 height: photoMeta?.height ?? null,
                 type,

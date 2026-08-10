@@ -1,9 +1,13 @@
+export type MediaFileVariant = "thumb" | "large";
+
 export function mediaFileUrl(
   mediaId: string,
-  options?: { thumb?: boolean }
+  options?: { thumb?: boolean; variant?: MediaFileVariant }
 ): string {
   const base = `/api/media/${mediaId}/file`;
-  return options?.thumb ? `${base}?variant=thumb` : base;
+  const variant =
+    options?.variant ?? (options?.thumb ? "thumb" : undefined);
+  return variant ? `${base}?variant=${variant}` : base;
 }
 
 /** Same-origin proxy URL for playback (supports HTTP Range on the file route). */
@@ -12,6 +16,19 @@ export function mediaPlaybackUrl(media: {
   url: string | null;
   type: string;
 }): string {
+  return mediaFileUrl(media.id);
+}
+
+/** Lightbox URL for photos — requests the large variant (lazy-generated when missing). */
+export function mediaLightboxUrl(media: {
+  id: string;
+  largeUrl?: string | null;
+  url: string | null;
+  type: string;
+}): string {
+  if (media.type === "PHOTO") {
+    return mediaFileUrl(media.id, { variant: "large" });
+  }
   return mediaFileUrl(media.id);
 }
 

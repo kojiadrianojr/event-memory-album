@@ -10,6 +10,7 @@ export const CACHE_TTL = {
   feed: parseEnvInt("CACHE_TTL_FEED", 30),
   wall: parseEnvInt("CACHE_TTL_WALL", 60),
   lookup: parseEnvInt("CACHE_TTL_LOOKUP", 3600),
+  mediaFile: parseEnvInt("CACHE_TTL_MEDIA_FILE", 3600),
   moments: 300,
   prompts: 300,
 } as const;
@@ -64,6 +65,10 @@ export function wallKey(eventId: string): string {
 
 export function idempotencyKey(eventId: string, clientKey: string): string {
   return `idempotency:${eventId}:${clientKey}`;
+}
+
+export function mediaFileKey(mediaId: string): string {
+  return `cache:media:file:${mediaId}`;
 }
 
 export function presenceKey(eventId: string): string {
