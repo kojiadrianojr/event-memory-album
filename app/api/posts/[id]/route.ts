@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { invalidateFeed } from "@/lib/cache-invalidate";
 import {
   getPostForGuestMutation,
   verifyAccessTokenForPost,
@@ -75,6 +76,8 @@ export async function PATCH(
     data,
     include: postInclude,
   });
+
+  await invalidateFeed(post.eventId);
 
   return NextResponse.json(updated);
 }
