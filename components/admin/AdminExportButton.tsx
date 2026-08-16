@@ -35,8 +35,14 @@ export default function AdminExportButton({
         res.headers
           .get("Content-Disposition")
           ?.match(/filename="(.+)"/)?.[1] ?? "album-export.zip";
+      // Firefox only honours .click() on an anchor that is in the document, and
+      // the object URL has to outlive the click long enough for the browser to
+      // start reading it.
+      a.style.display = "none";
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       setError("Network error. Please try again.");
     } finally {
