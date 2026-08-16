@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server";
-import { createRequire } from "module";
 import { Readable } from "stream";
-import type { Archiver, ArchiverOptions } from "archiver";
+import { ZipArchive } from "archiver";
 import { db } from "@/lib/db";
 import { findEventByAdminToken } from "@/lib/event-auth";
 import { safeExportFilename } from "@/lib/export-filename";
-
-const require = createRequire(import.meta.url);
-const createArchive = require("archiver") as (
-  format: string,
-  options?: ArchiverOptions
-) => Archiver;
 
 export async function GET(
   request: Request,
@@ -74,7 +67,18 @@ export async function GET(
     }),
   }));
 
-  const archive = createArchive("zip", { zlib: { level: 5 } });
+  const archive = new ZipArchive({ zlib: { level: 5 } });
+
+  // An unhandled 'error' on the archive stream throws out of the stream machinery
+  // and leaves the response hanging open with a truncated body. Destroy the stream
+  // instead so the client sees the transfer end.
+  archive.on("error", (err: Error) => {
+    console.error("[export] archive error", err);
+    archive.destroy(err);
+  });
+  archive.on("warning", (err: Error) => {
+    console.warn("[export] archive warning", err);
+  });
 
   archive.append(
     JSON.stringify(
@@ -117,7 +121,10 @@ export async function GET(
       }
     }
     await archive.finalize();
-  })();
+  })().catch((err: unknown) => {
+    console.error("[export] failed to build archive", err);
+    archive.destroy(err instanceof Error ? err : new Error(String(err)));
+  });
 
   const safeName = safeExportFilename(event.name);
 

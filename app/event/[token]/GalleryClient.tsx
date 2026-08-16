@@ -29,12 +29,17 @@ import {
   setGalleryViewMode,
   type GalleryViewMode,
 } from "@/lib/gallery-view-storage";
-import { mergeFeedPosts } from "@/lib/merge-feed-posts";
+import {
+  createPendingLocalWrites,
+  markLocalReactionWrite,
+  prunePendingWrites,
+  reconcileFeedPosts,
+} from "@/lib/merge-feed-posts";
+import { useLiveFeed } from "@/lib/use-live-feed";
 import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import PullToRefreshIndicator from "@/components/gallery/PullToRefreshIndicator";
 import NewPostsBanner from "@/components/gallery/NewPostsBanner";
 
-const GALLERY_POLL_INTERVAL_MS = 30_000;
 const SCROLL_TOP_THRESHOLD_PX = 80;
 
 interface GalleryClientProps {
@@ -93,7 +98,7 @@ export default function GalleryClient({
   const [moments, setMoments] = useState<EventMoment[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingNewPosts, setPendingNewPosts] = useState<PostItem[]>([]);
-  const [lightboxPost, setLightboxPost] = useState<PostItem | null>(null);
+  const [lightboxPostId, setLightboxPostId] = useState<string | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = useState(0);
   const [lightboxFlatIndex, setLightboxFlatIndex] = useState<number | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -104,10 +109,17 @@ export default function GalleryClient({
   const [userSelectedDay, setUserSelectedDay] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const postsRef = useRef<PostItem[]>([]);
+  const pendingWritesRef = useRef(createPendingLocalWrites());
 
   useEffect(() => {
     postsRef.current = posts;
   }, [posts]);
+
+  /** The open post, read from `posts` so live updates reach the lightbox. */
+  const lightboxPost = useMemo(
+    () => posts.find((post) => post.id === lightboxPostId) ?? null,
+    [posts, lightboxPostId]
+  );
 
   const momentQuery = selectedMomentId
     ? `?momentId=${encodeURIComponent(selectedMomentId)}`
@@ -127,30 +139,46 @@ export default function GalleryClient({
     }
   }, [token, momentQuery]);
 
-  const pollNewPosts = useCallback(async () => {
-    const currentPosts = postsRef.current;
-
-    if (currentPosts.length === 0) {
+  /**
+   * Folds the latest feed into current state. Updates to posts already on
+   * screen (comments, reactions, caption edits) apply immediately; only
+   * genuinely new posts wait behind the banner when the user is scrolled down.
+   */
+  const syncFeed = useCallback(async () => {
+    if (postsRef.current.length === 0) {
       await refreshFeed();
       return;
     }
 
+    const fetchStartedAt = Date.now();
     try {
-      const separator = momentQuery ? "&" : "?";
-      const res = await fetch(
-        `/api/events/${token}/media${momentQuery}${separator}limit=50`
-      );
+      const res = await fetch(`/api/events/${token}/media${momentQuery}`);
       if (!res.ok) return;
 
-      const data = (await res.json()) as { items?: PostItem[] };
-      const items = data.items ?? [];
-      if (items.length === 0) return;
+      const incoming = (await res.json()) as PostItem[];
+      if (!Array.isArray(incoming) || incoming.length === 0) return;
 
-      if (window.scrollY <= SCROLL_TOP_THRESHOLD_PX) {
-        setPosts((prev) => mergeFeedPosts(prev, items).merged);
-      } else {
-        setPendingNewPosts((prev) => mergeFeedPosts(prev, items).merged);
-      }
+      // Classify against the last rendered feed — only decides what is staged
+      // behind the banner, so a slightly stale read is harmless.
+      const knownIds = new Set(postsRef.current.map((post) => post.id));
+      const newPosts = incoming.filter((post) => !knownIds.has(post.id));
+      const stageNewPosts =
+        newPosts.length > 0 && window.scrollY > SCROLL_TOP_THRESHOLD_PX;
+
+      // The merge itself runs against genuinely current state so it can never
+      // revert a reaction or comment committed while this request was in flight.
+      const pending = pendingWritesRef.current;
+      const toApply = stageNewPosts
+        ? incoming.filter((post) => knownIds.has(post.id))
+        : incoming;
+
+      setPosts(
+        (prev) =>
+          reconcileFeedPosts(prev, toApply, { fetchStartedAt, pending }).merged
+      );
+      setPendingNewPosts(stageNewPosts ? newPosts : []);
+
+      prunePendingWrites(pending, incoming, fetchStartedAt);
     } catch {
       // best-effort
     }
@@ -160,29 +188,11 @@ export default function GalleryClient({
     if (readOnly || guestName) refreshFeed();
   }, [readOnly, guestName, refreshFeed]);
 
-  useEffect(() => {
-    if (!(readOnly || guestName) || lightboxOpen) return;
-
-    const timer = setInterval(() => {
-      void pollNewPosts();
-    }, GALLERY_POLL_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [readOnly, guestName, lightboxOpen, pollNewPosts]);
-
-  useEffect(() => {
-    if (!(readOnly || guestName)) return;
-
-    function onVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        void pollNewPosts();
-      }
-    }
-
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [readOnly, guestName, pollNewPosts]);
+  useLiveFeed({
+    token,
+    enabled: Boolean(readOnly || guestName),
+    onChanged: syncFeed,
+  });
 
   const { pullDistance, isRefreshing, pullThreshold } = usePullToRefresh({
     onRefresh: refreshFeed,
@@ -212,7 +222,7 @@ export default function GalleryClient({
   }, [pendingNewPosts, uploaderFilter]);
 
   function loadPendingPosts() {
-    setPosts((prev) => mergeFeedPosts(prev, pendingNewPosts).merged);
+    setPosts((prev) => reconcileFeedPosts(prev, pendingNewPosts).merged);
     setPendingNewPosts([]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -258,26 +268,20 @@ export default function GalleryClient({
   }, [posts]);
 
   function updatePostReactions(postId: string, reactions: Reaction[]) {
+    markLocalReactionWrite(pendingWritesRef.current, postId);
     setPosts((prev) =>
       prev.map((item) => (item.id === postId ? { ...item, reactions } : item))
-    );
-    setLightboxPost((prev) =>
-      prev?.id === postId ? { ...prev, reactions } : prev
     );
   }
 
   function addPostComment(postId: string, comment: Comment) {
+    pendingWritesRef.current.commentIds.add(comment.id);
     setPosts((prev) =>
       prev.map((item) =>
         item.id === postId
           ? { ...item, comments: [...item.comments, comment] }
           : item
       )
-    );
-    setLightboxPost((prev) =>
-      prev?.id === postId
-        ? { ...prev, comments: [...prev.comments, comment] }
-        : prev
     );
   }
 
@@ -301,27 +305,14 @@ export default function GalleryClient({
           : item
       )
     );
-    setLightboxPost((prev) =>
-      prev?.id === postId
-        ? {
-            ...prev,
-            caption: patch.caption,
-            momentId: patch.momentId,
-            moment: patch.moment,
-          }
-        : prev
-    );
   }
 
   function removePost(postId: string) {
     setPosts((prev) => prev.filter((item) => item.id !== postId));
-    setLightboxPost((prev) => {
-      if (prev?.id === postId) {
-        setLightboxOpen(false);
-        return null;
-      }
-      return prev;
-    });
+    if (lightboxPostId === postId) {
+      setLightboxOpen(false);
+      setLightboxPostId(null);
+    }
   }
 
   function updateComment(postId: string, comment: Comment) {
@@ -337,19 +328,10 @@ export default function GalleryClient({
           : item
       )
     );
-    setLightboxPost((prev) =>
-      prev?.id === postId
-        ? {
-            ...prev,
-            comments: prev.comments.map((c) =>
-              c.id === comment.id ? comment : c
-            ),
-          }
-        : prev
-    );
   }
 
   function removeComment(postId: string, commentId: string) {
+    pendingWritesRef.current.commentIds.delete(commentId);
     setPosts((prev) =>
       prev.map((item) =>
         item.id === postId
@@ -360,25 +342,17 @@ export default function GalleryClient({
           : item
       )
     );
-    setLightboxPost((prev) =>
-      prev?.id === postId
-        ? {
-            ...prev,
-            comments: prev.comments.filter((c) => c.id !== commentId),
-          }
-        : prev
-    );
   }
 
   function openFeedLightbox(post: PostItem, mediaIndex: number) {
     setLightboxFlatIndex(null);
-    setLightboxPost(post);
+    setLightboxPostId(post.id);
     setLightboxMediaIndex(visualMediaIndex(post, mediaIndex));
     setLightboxOpen(true);
   }
 
   function openPhotosLightbox(index: number) {
-    setLightboxPost(null);
+    setLightboxPostId(null);
     setLightboxFlatIndex(index);
     setLightboxOpen(true);
   }
